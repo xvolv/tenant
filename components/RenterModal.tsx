@@ -28,7 +28,7 @@ export default function RenterModal({
   const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${renter.nationalId}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="mx-4 max-w-md w-full bg-white rounded-lg shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-zinc-200">

@@ -69,6 +69,19 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   // State to track paid status for manual toggling
   const [paidStatuses, setPaidStatuses] = useState<Set<string>>(new Set());
 
+  // State for payment warning modal
+  const [paymentWarning, setPaymentWarning] = useState<{
+    roomId: string;
+    year: number;
+    monthIndex: number;
+    dueDate: number;
+    action:
+      | "mark-paid"
+      | "mark-paid-normal"
+      | "mark-paid-future"
+      | "unmark-paid";
+  } | null>(null);
+
   // Always show 2016 to 2020 (current year + 2 future years)
   const now = new Date();
   const ethiopianCurrentYear = toEthiopian(
@@ -231,11 +244,6 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     const cellFlatIndex =
       displayYears.findIndex((y) => y === year) * months.length + monthIndex;
 
-    if (cellFlatIndex > currentMonthFlatIndex) {
-      // Future month - don't allow clicking
-      return;
-    }
-
     // Check if this cell is vacant (no renter during this period)
     const snap = getSnapshot(roomId, year, monthIndex as EthiopianMonthIndex);
     if (snap?.status === "vacant") {
@@ -243,322 +251,407 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       return;
     }
 
-    // Toggle paid status
-    const key = `${roomId}-${year}-${monthIndex}`;
-    setPaidStatuses((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(key)) {
-        newSet.delete(key);
-      } else {
-        newSet.add(key);
+    // Check if it's current month and before due date (day-level enforcement)
+    const isCurrentMonth = cellFlatIndex === currentMonthFlatIndex;
+    const renter = findRenterByRoom(roomId);
+
+    // Check current paid status
+    const cellKey = `${roomId}-${year}-${monthIndex}`;
+    const isCurrentlyPaid =
+      paidStatuses.has(cellKey) || snap?.status === "paid";
+
+    const isFutureMonth = cellFlatIndex > currentMonthFlatIndex;
+
+    if (isCurrentMonth && renter?.moveIn && !isCurrentlyPaid) {
+      const dueDate = renter.moveIn.day; // Use move-in day as due date for now
+      if (currentEthiopianDate.day < dueDate) {
+        // Show early payment warning modal
+        setPaymentWarning({
+          roomId,
+          year,
+          monthIndex,
+          dueDate,
+          action: "mark-paid",
+        });
+        return; // Wait for user response in modal
       }
-      return newSet;
-    });
+    }
+
+    // Future month payments: allow, but always confirm
+    if (isFutureMonth && !isCurrentlyPaid) {
+      setPaymentWarning({
+        roomId,
+        year,
+        monthIndex,
+        dueDate: 0,
+        action: "mark-paid-future",
+      });
+      return;
+    }
+
+    // For unmarking as paid, always show confirmation
+    if (isCurrentlyPaid) {
+      setPaymentWarning({
+        roomId,
+        year,
+        monthIndex,
+        dueDate: 0, // Not needed for unmark action
+        action: "unmark-paid",
+      });
+      return; // Wait for user response in modal
+    }
+
+    // For normal marking as paid (no early payment warning needed)
+    if (!isCurrentlyPaid) {
+      setPaymentWarning({
+        roomId,
+        year,
+        monthIndex,
+        dueDate: 0, // Not needed for normal paid action
+        action: "mark-paid-normal",
+      });
+      return; // Wait for user response in modal
+    }
   };
 
+  // Handle confirming payment action
+  const handleConfirmPaymentAction = () => {
+    if (!paymentWarning) return;
+
+    const key = `${paymentWarning.roomId}-${paymentWarning.year}-${paymentWarning.monthIndex}`;
+    setPaidStatuses((prev) => {
+      const newSet = new Set(prev);
+
+      if (paymentWarning.action === "unmark-paid") {
+        // Remove from paid status
+        newSet.delete(key);
+      } else {
+        // Add to paid status (both early and normal)
+        newSet.add(key);
+      }
+
+      return newSet;
+    });
+
+    // Close warning modal
+    setPaymentWarning(null);
+  };
+
+  // Handle canceling payment action
+  const handleCancelPaymentAction = () => {
+    setPaymentWarning(null);
+  };
+
+  const isAnyModalOpen = Boolean(selectedRenter || paymentWarning);
+
   return (
-    <div className="mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm">
-      {/* Language switcher above the matrix */}
-      <div className="flex justify-end px-4 py-2 border-b border-black bg-zinc-50">
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-            className="flex items-center gap-2 h-8 rounded-md bg-white border border-zinc-300 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            <span>🌐</span>
-            <span>{LANGUAGE_INFO[language].flag}</span>
-            <span className="hidden sm:inline">
-              {LANGUAGE_INFO[language].name}
-            </span>
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-
-          {showLanguageDropdown && (
-            <div className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-md shadow-lg z-50">
-              {Object.entries(LANGUAGE_INFO).map(([langCode, info]) => (
-                <button
-                  key={langCode}
-                  onClick={() => {
-                    setLanguage(langCode as Language);
-                    setShowLanguageDropdown(false);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-50 ${
-                    language === langCode
-                      ? "bg-zinc-100 text-zinc-900"
-                      : "text-zinc-700"
-                  }`}
-                >
-                  <span>{info.flag}</span>
-                  <span>{info.name}</span>
-                  {language === langCode && (
-                    <svg
-                      className="w-3 h-3 ml-auto"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      {/* Current day header */}
-      <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
-        <div className="text-sm font-semibold text-zinc-900 truncate">
-          {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
-          {currentEthiopianDate.day}, {currentEthiopianDate.year}
-        </div>
-      </div>
-      <div className="flex items-center justify-between px-4 py-2 border-b border-black">
-        <button
-          onClick={handlePrev}
-          disabled={currentPage === 0}
-          className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {getLocalizedText("previous3", language)}
-        </button>
-        <button
-          onClick={handleToday}
-          className="h-8 rounded-md bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
-        >
-          {getLocalizedText("moveToToday", language)}
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={currentPage === totalPages - 1}
-          className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {getLocalizedText("next3", language)}
-        </button>
-      </div>
+    <div className="relative">
       <div
-        className="overflow-x-auto scroll-smooth snap-x snap-mandatory relative"
-        ref={scrollContainerRef}
-        style={{ scrollPaddingLeft: "0px" }}
+        className={`mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm ${
+          isAnyModalOpen ? "blur-sm pointer-events-none select-none" : ""
+        }`}
       >
-        <div
-          style={{
-            minWidth: totalMonths * monthMinWidth + 200, // Full width for all months
-            display: "grid",
-            gridTemplateColumns: `${metaColWidth} repeat(${totalMonths}, minmax(${monthMinWidth}px, 1fr))`,
-            scrollSnapAlign: "start",
-          }}
-        >
-          <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-blue-800 sm:px-4 sm:text-xs">
-            {visibleYear}
-          </div>
-          {years.map((y, yearIndex) => (
-            <div
-              key={y}
-              className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-700 sm:px-3 sm:text-xs ${
-                yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
-              } ${yearIndex === 0 ? "" : "border-l-4 border-l-zinc-200"}`}
-              style={{ gridColumn: `span ${months.length}` }}
+        {/* Language switcher above the matrix */}
+        <div className="flex justify-end px-4 py-2 border-b border-black bg-zinc-50">
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+              className="flex items-center gap-2 h-8 rounded-md bg-white border border-zinc-300 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
             >
-              {y}
-            </div>
-          ))}
+              <span>🌐</span>
+              <span>{LANGUAGE_INFO[language].flag}</span>
+              <span className="hidden sm:inline">
+                {LANGUAGE_INFO[language].name}
+              </span>
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
 
-          <div className="sticky left-0 z-20 border-b border-black bg-zinc-200 px-3 py-3 text-[11px] font-semibold text-zinc-700 sm:px-4 sm:text-xs backdrop-blur-none">
-            {getLocalizedText("renterRoom", language)}
-          </div>
-          {years.flatMap((y, yearIndex) =>
-            months.map((m, monthIndex) => {
-              const flatIndex = yearIndex * months.length + monthIndex;
-              return (
-                <div
-                  key={`${y}-${m}`}
-                  className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs truncate ${
-                    yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
-                  } ${
-                    flatIndex === currentMonthFlatIndex
-                      ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
-                      : monthIndex % 3 === 0
-                        ? "border-l-2 border-l-zinc-300"
-                        : ""
-                  }`}
-                >
-                  {m}
-                </div>
-              );
-            }),
-          )}
-
-          {mockRooms.map((room) => {
-            const renter = findRenterByRoom(room.id);
-            return (
-              <div key={room.id} style={{ display: "contents" }}>
-                <div
-                  key={`${room.id}-meta`}
-                  className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none cursor-pointer hover:bg-zinc-300 transition-colors"
-                  onClick={() => handleRoomClick(room)}
-                >
-                  {/* Grid Layout: 2 columns, 2 rows */}
-                  <div className="grid grid-cols-[auto_1fr] grid-rows-2 gap-x-2 gap-y-1">
-                    {/* Avatar - Top Left */}
-                    {renter && (
-                      <div className="row-span-2 flex items-start justify-center">
-                        <div className="relative flex-shrink-0">
-                          <img
-                            src={getAvatarUrl(renter.nationalId)}
-                            alt={getLocalizedRenterName(renter.id, language)}
-                            className="w-6 h-6 rounded-full object-cover border border-zinc-300"
-                          />
-                          <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-                        </div>
-                      </div>
+            {showLanguageDropdown && (
+              <div className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-md shadow-lg z-50">
+                {Object.entries(LANGUAGE_INFO).map(([langCode, info]) => (
+                  <button
+                    key={langCode}
+                    onClick={() => {
+                      setLanguage(langCode as Language);
+                      setShowLanguageDropdown(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-50 ${
+                      language === langCode
+                        ? "bg-zinc-100 text-zinc-900"
+                        : "text-zinc-700"
+                    }`}
+                  >
+                    <span>{info.flag}</span>
+                    <span>{info.name}</span>
+                    {language === langCode && (
+                      <svg
+                        className="w-3 h-3 ml-auto"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
                     )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Current day header */}
+        <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
+          <div className="text-sm font-semibold text-zinc-900 truncate">
+            {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
+            {currentEthiopianDate.day}, {currentEthiopianDate.year}
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-black">
+          <button
+            onClick={handlePrev}
+            disabled={currentPage === 0}
+            className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {getLocalizedText("previous3", language)}
+          </button>
+          <button
+            onClick={handleToday}
+            className="h-8 rounded-md bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
+          >
+            {getLocalizedText("moveToToday", language)}
+          </button>
+          <button
+            onClick={handleNext}
+            disabled={currentPage === totalPages - 1}
+            className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {getLocalizedText("next3", language)}
+          </button>
+        </div>
+        <div
+          className="overflow-x-auto scroll-smooth snap-x snap-mandatory relative"
+          ref={scrollContainerRef}
+          style={{ scrollPaddingLeft: "0px" }}
+        >
+          <div
+            style={{
+              minWidth: totalMonths * monthMinWidth + 200, // Full width for all months
+              display: "grid",
+              gridTemplateColumns: `${metaColWidth} repeat(${totalMonths}, minmax(${monthMinWidth}px, 1fr))`,
+              scrollSnapAlign: "start",
+            }}
+          >
+            <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-blue-800 sm:px-4 sm:text-xs">
+              {visibleYear}
+            </div>
+            {years.map((y, yearIndex) => (
+              <div
+                key={y}
+                className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-700 sm:px-3 sm:text-xs ${
+                  yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
+                } ${yearIndex === 0 ? "" : "border-l-4 border-l-zinc-200"}`}
+                style={{ gridColumn: `span ${months.length}` }}
+              >
+                {y}
+              </div>
+            ))}
 
-                    {/* Renter Name - Top Right */}
-                    <div className="flex items-center">
+            <div className="sticky left-0 z-20 border-b border-black bg-zinc-200 px-3 py-3 text-[11px] font-semibold text-zinc-700 sm:px-4 sm:text-xs backdrop-blur-none">
+              {getLocalizedText("renterRoom", language)}
+            </div>
+            {years.flatMap((y, yearIndex) =>
+              months.map((m, monthIndex) => {
+                const flatIndex = yearIndex * months.length + monthIndex;
+                return (
+                  <div
+                    key={`${y}-${m}`}
+                    className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs truncate ${
+                      yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
+                    } ${
+                      flatIndex === currentMonthFlatIndex
+                        ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
+                        : monthIndex % 3 === 0
+                          ? "border-l-2 border-l-zinc-300"
+                          : ""
+                    }`}
+                  >
+                    {m}
+                  </div>
+                );
+              }),
+            )}
+
+            {mockRooms.map((room) => {
+              const renter = findRenterByRoom(room.id);
+              return (
+                <div key={room.id} style={{ display: "contents" }}>
+                  <div
+                    key={`${room.id}-meta`}
+                    className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none cursor-pointer hover:bg-zinc-300 transition-colors"
+                    onClick={() => handleRoomClick(room)}
+                  >
+                    {/* Grid Layout: 2 columns, 2 rows */}
+                    <div className="grid grid-cols-[auto_1fr] grid-rows-2 gap-x-2 gap-y-1">
+                      {/* Avatar - Top Left */}
                       {renter && (
-                        <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
-                          {getLocalizedRenterName(renter.id, language)}
+                        <div className="row-span-2 flex items-start justify-center">
+                          <div className="relative flex-shrink-0">
+                            <img
+                              src={getAvatarUrl(renter.nationalId)}
+                              alt={getLocalizedRenterName(renter.id, language)}
+                              className="w-6 h-6 rounded-full object-cover border border-zinc-300"
+                            />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+                          </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* Room Name - Bottom Left (if no renter) or Empty */}
-                    {!renter && (
+                      {/* Renter Name - Top Right */}
                       <div className="flex items-center">
-                        <div className="text-sm font-semibold text-zinc-900">
-                          {getLocalizedRoomName(room.id, language)}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Move-in Date - Bottom Right (spans full width if no avatar) */}
-                    <div
-                      className={`flex items-end ${!renter ? "col-span-2" : ""} mb-2`}
-                    >
-                      <div className="truncate text-xs font-bold text-zinc-700">
-                        {renter ? (
-                          renter.moveIn ? (
-                            formatEthiopianDate(renter.moveIn, language)
-                          ) : (
-                            ""
-                          )
-                        ) : (
-                          <div className="text-sm font-semibold text-zinc-900">
-                            {getLocalizedRoomName(room.id, language)}
+                        {renter && (
+                          <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
+                            {getLocalizedRenterName(renter.id, language)}
                           </div>
                         )}
                       </div>
-                    </div>
-                  </div>
-                </div>
 
-                {years.flatMap((y, yearIndex) =>
-                  months.map((_, monthIndex) => {
-                    const flatIndex = yearIndex * months.length + monthIndex;
-                    const snap = getSnapshot(
-                      room.id,
-                      y,
-                      monthIndex as EthiopianMonthIndex,
-                    );
+                      {/* Room Name - Bottom Left (if no renter) or Empty */}
+                      {!renter && (
+                        <div className="flex items-center">
+                          <div className="text-sm font-semibold text-zinc-900">
+                            {getLocalizedRoomName(room.id, language)}
+                          </div>
+                        </div>
+                      )}
 
-                    // Check if this cell is manually marked as paid
-                    const cellKey = `${room.id}-${y}-${monthIndex}`;
-                    const isManuallyPaid = paidStatuses.has(cellKey);
-
-                    // Determine status: manual paid takes priority, then original status
-                    let status: RentCellStatus;
-                    if (isManuallyPaid) {
-                      status = "paid";
-                    } else if (
-                      snap?.status === "paid" &&
-                      !paidStatuses.has(`${room.id}-${y}-${monthIndex}-unpaid`)
-                    ) {
-                      status = "paid";
-                    } else {
-                      status = snap?.status ?? "na";
-                    }
-
-                    // Check if this month is clickable (past or current) and not vacant
-                    const isClickable =
-                      flatIndex <= currentMonthFlatIndex &&
-                      snap?.status !== "vacant" &&
-                      snap?.status !== "paid";
-
-                    return (
+                      {/* Move-in Date - Bottom Right (spans full width if no avatar) */}
                       <div
-                        key={`${room.id}-${y}-${monthIndex}`}
-                        className={`border-b border-black px-2 py-2 ${
-                          flatIndex === currentMonthFlatIndex
-                            ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
-                            : monthIndex % 3 === 0
-                              ? "border-l-2 border-l-zinc-300"
-                              : ""
-                        }`}
+                        className={`flex items-end ${!renter ? "col-span-2" : ""} mb-2`}
                       >
-                        <div
-                          className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
-                            isClickable
-                              ? "cursor-pointer hover:border-blue-400"
-                              : "cursor-default"
-                          } ${cellClass(status)}`}
-                          title={snap?.note ?? ""}
-                          onClick={() =>
-                            isClickable &&
-                            handleCellClick(room.id, y, monthIndex)
-                          }
-                        >
-                          {status === "paid" && (
-                            <div className="absolute inset-0 flex items-center justify-center opacity-20">
-                              <svg
-                                className="h-8 w-8 text-emerald-600"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
+                        <div className="truncate text-xs font-bold text-zinc-700">
+                          {renter ? (
+                            renter.moveIn ? (
+                              formatEthiopianDate(renter.moveIn, language)
+                            ) : (
+                              ""
+                            )
+                          ) : (
+                            <div className="text-sm font-semibold text-zinc-900">
+                              {getLocalizedRoomName(room.id, language)}
                             </div>
                           )}
-                          {renter?.moveIn && (
-                            <span className="absolute top-0 right-0 text-[9px] text-zinc-600 px-1 z-10">
-                              {renter.moveIn.day}
-                            </span>
-                          )}
-                          {status !== "paid" &&
-                            cellLabel(status, snap?.paidDate, language) !==
-                              "" && (
-                              <span className="text-center">
-                                {cellLabel(status, snap?.paidDate, language)}
-                              </span>
-                            )}
                         </div>
                       </div>
-                    );
-                  }),
-                )}
-              </div>
-            );
-          })}
+                    </div>
+                  </div>
+
+                  {years.flatMap((y, yearIndex) =>
+                    months.map((_, monthIndex) => {
+                      const flatIndex = yearIndex * months.length + monthIndex;
+                      const snap = getSnapshot(
+                        room.id,
+                        y,
+                        monthIndex as EthiopianMonthIndex,
+                      );
+
+                      // Check if this cell is manually marked as paid
+                      const cellKey = `${room.id}-${y}-${monthIndex}`;
+                      const isManuallyPaid = paidStatuses.has(cellKey);
+
+                      // Determine status: manual paid takes priority, then original status
+                      let status: RentCellStatus;
+                      if (isManuallyPaid) {
+                        status = "paid";
+                      } else if (
+                        snap?.status === "paid" &&
+                        !paidStatuses.has(
+                          `${room.id}-${y}-${monthIndex}-unpaid`,
+                        )
+                      ) {
+                        status = "paid";
+                      } else {
+                        status = snap?.status ?? "na";
+                      }
+
+                      // Check if this month is clickable (past or current) and not vacant
+                      const isClickable = snap?.status !== "vacant";
+
+                      return (
+                        <div
+                          key={`${room.id}-${y}-${monthIndex}`}
+                          className={`border-b border-black px-2 py-2 ${
+                            flatIndex === currentMonthFlatIndex
+                              ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
+                              : monthIndex % 3 === 0
+                                ? "border-l-2 border-l-zinc-300"
+                                : ""
+                          }`}
+                        >
+                          <div
+                            className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
+                              isClickable
+                                ? "cursor-pointer hover:border-blue-400"
+                                : "cursor-default"
+                            } ${cellClass(status)}`}
+                            title={snap?.note ?? ""}
+                            onClick={() =>
+                              isClickable &&
+                              handleCellClick(room.id, y, monthIndex)
+                            }
+                          >
+                            {status === "paid" && (
+                              <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                                <svg
+                                  className="h-8 w-8 text-emerald-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            {renter?.moveIn && (
+                              <span className="absolute top-0 right-0 text-[9px] text-zinc-600 px-1 z-10">
+                                {renter.moveIn.day}
+                              </span>
+                            )}
+                            {status !== "paid" &&
+                              cellLabel(status, snap?.paidDate, language) !==
+                                "" && (
+                                <span className="text-center">
+                                  {cellLabel(status, snap?.paidDate, language)}
+                                </span>
+                              )}
+                          </div>
+                        </div>
+                      );
+                    }),
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -571,6 +664,64 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
           language={language}
           onClose={() => setSelectedRenter(null)}
         />
+      )}
+
+      {/* Payment Warning Modal */}
+      {paymentWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-zinc-900">
+                {paymentWarning.action === "unmark-paid"
+                  ? language === "en"
+                    ? "Cancel Payment Confirmation"
+                    : "ክፍያ መሰረዝ ማረጋገጫ"
+                  : language === "en"
+                    ? "Payment Confirmation"
+                    : "ክፍያ ማረጋገጫ"}
+              </h3>
+              <p className="mt-2 text-sm text-zinc-600">
+                {paymentWarning.action === "unmark-paid"
+                  ? language === "en"
+                    ? "Do you want to mark this month as unpaid?"
+                    : "የዚህ ወር ክፍያ ማጥፋት ይፈልጋሉ ?"
+                  : paymentWarning.action === "mark-paid-future"
+                    ? language === "en"
+                      ? "This is a future month. Mark as paid anyway?"
+                      : "ይህ የወደፊት ወር ነው፣ ተከፍሏል ?"
+                    : paymentWarning.action === "mark-paid" &&
+                        paymentWarning.dueDate > 0
+                      ? language === "en"
+                        ? `Due date is ${paymentWarning.dueDate}. Mark as paid anyway?`
+                        : `ገና ${paymentWarning.dueDate} ቀን ይቀራል፣ ተከፍሏል ?`
+                      : language === "en"
+                        ? "Mark this month as paid?"
+                        : "ይህን ወር እንደተከፈለ መምልክ ይፈልጋሉ?"}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleCancelPaymentAction}
+                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-2"
+              >
+                {language === "en" ? "Cancel" : "ይቅር"}
+              </button>
+              <button
+                onClick={handleConfirmPaymentAction}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                {paymentWarning.action === "unmark-paid"
+                  ? language === "en"
+                    ? "Mark as Unpaid"
+                    : "አጥፍ"
+                  : language === "en"
+                    ? "Mark as Paid"
+                    : "ተከፍሏል"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
