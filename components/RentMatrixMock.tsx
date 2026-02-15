@@ -263,6 +263,26 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     }
   };
 
+  const handleDeleteRenter = (renterId: string, roomId: string) => {
+    setRenters((prev) => prev.filter((r) => r.id !== renterId));
+    setRooms((prev) => prev.filter((room) => room.id !== roomId));
+    setRenterPhotoUrl((prev) => {
+      if (!(renterId in prev)) return prev;
+      const { [renterId]: _, ...rest } = prev;
+      return rest;
+    });
+    setPaidStatuses((prev) => {
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (!key.startsWith(`${roomId}-`)) {
+          next.add(key);
+        }
+      }
+      return next;
+    });
+    setSelectedRenter(null);
+  };
+
   const handleNewRenterPhotoChange = (file: File | null) => {
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -806,6 +826,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
           roomId={selectedRenter.roomId}
           language={language}
           onClose={() => setSelectedRenter(null)}
+          onDelete={handleDeleteRenter}
         />
       )}
 
