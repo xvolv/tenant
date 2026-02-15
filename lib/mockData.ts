@@ -5,6 +5,8 @@ import {
   getLocalizedWeekdays,
 } from "./localization";
 
+import { toGregorian } from "ethiopian-calendar-new";
+
 export type EthiopianMonthIndex = number; // 0..11
 
 export type RentCellStatus = "paid" | "vacant" | "na";
@@ -236,7 +238,19 @@ export function formatEthiopianDate(
   const months = getLocalizedMonths(language);
   const weekdays = getLocalizedWeekdays(language);
   const month = months[input.monthIndex] ?? "";
-  const weekday = weekdays[input.day % 7] ?? "";
+
+  let weekday = "";
+  try {
+    const gc = toGregorian(input.year, input.monthIndex + 1, input.day);
+    const gcDate = new Date(gc.year, gc.month - 1, gc.day);
+    const jsDay = gcDate.getDay();
+
+    // Our weekday arrays start with Monday, but JS getDay() starts with Sunday (0)
+    const weekdayIndex = (jsDay + 6) % 7;
+    weekday = weekdays[weekdayIndex] ?? "";
+  } catch {
+    weekday = "";
+  }
 
   // Use only first 3 letters for English weekdays to prevent overflow
   const shortWeekday = language === "en" ? weekday.slice(0, 3) : weekday;
