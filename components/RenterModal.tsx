@@ -6,6 +6,7 @@ import {
   getLocalizedRoomName,
   Language,
 } from "@/lib/localization";
+import { useState } from "react";
 
 type Props = {
   renter: Renter | null;
@@ -13,6 +14,7 @@ type Props = {
   roomId: string;
   language: Language;
   onClose: () => void;
+  onDelete: (renterId: string, roomId: string) => void;
 };
 
 export default function RenterModal({
@@ -21,8 +23,11 @@ export default function RenterModal({
   roomId,
   language,
   onClose,
+  onDelete,
 }: Props) {
   if (!renter) return null;
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Generate avatar URL using national ID
   const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${renter.nationalId}`;
@@ -135,15 +140,50 @@ export default function RenterModal({
         {/* Footer */}
         <div className="flex justify-end gap-3 p-6 border-t border-zinc-200 bg-zinc-50">
           <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+          >
+            {language === "en" ? "Delete" : "ሰርዝ"}
+          </button>
+          <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50"
           >
-            Close
-          </button>
-          <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-            Edit Renter
+            {language === "en" ? "Close" : "ዝጋ"}
           </button>
         </div>
+
+        {deleteConfirmOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            <div className="mx-4 w-full max-w-sm rounded-lg bg-white p-5 shadow-xl border border-zinc-200">
+              <div className="text-sm font-semibold text-zinc-900">
+                {language === "en" ? "Delete renter" : "ተከራይ ማጥፋት"}
+              </div>
+              <div className="mt-2 text-sm text-zinc-600">
+                {language === "en"
+                  ? "Are you sure you want to delete this renter?"
+                  : "ይህን ተከራይ በትክክል ማጥፋት ይፈልጋሉ?"}
+              </div>
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                  className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  {language === "en" ? "Cancel" : "ይቅር"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(renter.id, roomId)}
+                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                >
+                  {language === "en" ? "Confirm" : "አረጋግጥ"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
