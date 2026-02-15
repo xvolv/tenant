@@ -62,14 +62,16 @@ export default function RenterModal({
             <div className="relative">
               <img
                 src={avatarUrl}
-                alt={getLocalizedRenterName(renter.id, language)}
+                alt={
+                  getLocalizedRenterName(renter.id, language) || renter.fullName
+                }
                 className="w-16 h-16 rounded-full object-cover border-2 border-zinc-200"
               />
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
             <div className="flex-1">
               <div className="text-lg font-semibold text-zinc-900">
-                {getLocalizedRenterName(renter.id, language)}
+                {getLocalizedRenterName(renter.id, language) || renter.fullName}
               </div>
               <div className="text-sm text-zinc-500">{roomName}</div>
             </div>

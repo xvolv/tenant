@@ -3,9 +3,7 @@
 import {
   mockRooms,
   mockRenters,
-  getSnapshot,
-  findRenterByRoom,
-  ETHIOPIAN_MONTHS,
+  mockSnapshots,
   formatEthiopianDate,
   type Room,
   type Renter,
@@ -60,6 +58,11 @@ function cellLabel(
 export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [rooms, setRooms] = useState<Room[]>(mockRooms);
+  const [renters, setRenters] = useState<Renter[]>(mockRenters);
+  const [renterPhotoUrl, setRenterPhotoUrl] = useState<Record<string, string>>(
+    {},
+  );
   const [selectedRenter, setSelectedRenter] = useState<{
     renter: Renter;
     roomId: string;
@@ -221,12 +224,101 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${nationalId}`;
   };
 
+  const findRenterByRoomLocal = (roomId: string) => {
+    return renters.find((r) => r.roomId === roomId);
+  };
+
+  const getSnapshotLocal = (
+    roomId: string,
+    year: number,
+    monthIndex: EthiopianMonthIndex,
+  ): RentSnapshot | undefined => {
+    const explicitSnapshot = mockSnapshots.find(
+      (s) =>
+        s.roomId === roomId && s.year === year && s.monthIndex === monthIndex,
+    );
+    if (explicitSnapshot) return explicitSnapshot;
+
+    const renter = findRenterByRoomLocal(roomId);
+    if (renter) {
+      const moveInDate = new Date(
+        renter.moveIn.year,
+        renter.moveIn.monthIndex,
+        renter.moveIn.day,
+      );
+      const currentDate = new Date(year, monthIndex, 1);
+      if (currentDate < moveInDate) {
+        return { roomId, year, monthIndex, status: "vacant" };
+      }
+    }
+
+    return { roomId, year, monthIndex, status: "na" };
+  };
+
   // Handle room click to show renter modal
   const handleRoomClick = (room: Room) => {
-    const renter = findRenterByRoom(room.id);
+    const renter = findRenterByRoomLocal(room.id);
     if (renter) {
       setSelectedRenter({ renter, roomId: room.id });
     }
+  };
+
+  const handleNewRenterPhotoChange = (file: File | null) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setNewRenterPhotoPreviewUrl(url);
+  };
+
+  const resetAddRenterForm = () => {
+    setNewRenterFullName("");
+    setNewRenterPhone("");
+    setNewRenterNationalId("");
+    setNewRenterMoveInYear(2018);
+    setNewRenterMoveInMonthIndex(0);
+    setNewRenterMoveInDay("");
+    setNewRenterPhotoPreviewUrl(null);
+    setMonthPickerOpen(false);
+  };
+
+  const handleAddRenterSubmit = () => {
+    const fullName = newRenterFullName.trim();
+    const phone = newRenterPhone.trim();
+    const nationalId = newRenterNationalId.trim();
+    const moveInDay = Number(newRenterMoveInDay);
+    if (!fullName || !phone || !nationalId) return;
+    if (!Number.isFinite(moveInDay) || moveInDay < 1 || moveInDay > 30) return;
+
+    const roomNumber = rooms.length + 1;
+    const newRoom: Room = {
+      id: `room-${roomNumber}`,
+      roomNo: `ROOM ${roomNumber}`,
+    };
+
+    const renterNumber = renters.length + 1;
+    const newRenter: Renter = {
+      id: `t${renterNumber}`,
+      fullName,
+      phone,
+      roomId: newRoom.id,
+      nationalId,
+      moveIn: {
+        year: Number(newRenterMoveInYear),
+        monthIndex: newRenterMoveInMonthIndex,
+        day: moveInDay,
+      },
+    };
+
+    setRooms((prev) => [...prev, newRoom]);
+    setRenters((prev) => [...prev, newRenter]);
+    if (newRenterPhotoPreviewUrl) {
+      setRenterPhotoUrl((prev) => ({
+        ...prev,
+        [newRenter.id]: newRenterPhotoPreviewUrl,
+      }));
+    }
+
+    setAddRenterOpen(false);
+    resetAddRenterForm();
   };
 
   const handleToday = () => {
@@ -245,7 +337,11 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       displayYears.findIndex((y) => y === year) * months.length + monthIndex;
 
     // Check if this cell is vacant (no renter during this period)
-    const snap = getSnapshot(roomId, year, monthIndex as EthiopianMonthIndex);
+    const snap = getSnapshotLocal(
+      roomId,
+      year,
+      monthIndex as EthiopianMonthIndex,
+    );
     if (snap?.status === "vacant") {
       // Vacant cells cannot be marked as paid
       return;
@@ -253,7 +349,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
 
     // Check if it's current month and before due date (day-level enforcement)
     const isCurrentMonth = cellFlatIndex === currentMonthFlatIndex;
-    const renter = findRenterByRoom(roomId);
+    const renter = findRenterByRoomLocal(roomId);
 
     // Check current paid status
     const cellKey = `${roomId}-${year}-${monthIndex}`;
@@ -342,7 +438,22 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     setPaymentWarning(null);
   };
 
-  const isAnyModalOpen = Boolean(selectedRenter || paymentWarning);
+  const [addRenterOpen, setAddRenterOpen] = useState(false);
+  const [newRenterFullName, setNewRenterFullName] = useState("");
+  const [newRenterPhone, setNewRenterPhone] = useState("");
+  const [newRenterNationalId, setNewRenterNationalId] = useState("");
+  const [newRenterMoveInYear, setNewRenterMoveInYear] = useState(2018);
+  const [newRenterMoveInMonthIndex, setNewRenterMoveInMonthIndex] =
+    useState<EthiopianMonthIndex>(0);
+  const [newRenterMoveInDay, setNewRenterMoveInDay] = useState("");
+  const [newRenterPhotoPreviewUrl, setNewRenterPhotoPreviewUrl] = useState<
+    string | null
+  >(null);
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+
+  const isAnyModalOpen = Boolean(
+    selectedRenter || paymentWarning || addRenterOpen,
+  );
 
   return (
     <div className="relative">
@@ -496,8 +607,8 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
               }),
             )}
 
-            {mockRooms.map((room) => {
-              const renter = findRenterByRoom(room.id);
+            {rooms.map((room) => {
+              const renter = findRenterByRoomLocal(room.id);
               return (
                 <div key={room.id} style={{ display: "contents" }}>
                   <div
@@ -512,8 +623,14 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                         <div className="row-span-2 flex items-start justify-center">
                           <div className="relative flex-shrink-0">
                             <img
-                              src={getAvatarUrl(renter.nationalId)}
-                              alt={getLocalizedRenterName(renter.id, language)}
+                              src={
+                                renterPhotoUrl[renter.id] ??
+                                getAvatarUrl(renter.nationalId)
+                              }
+                              alt={
+                                getLocalizedRenterName(renter.id, language) ||
+                                renter.fullName
+                              }
                               className="w-6 h-6 rounded-full object-cover border border-zinc-300"
                             />
                             <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
@@ -525,7 +642,8 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                       <div className="flex items-center">
                         {renter && (
                           <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
-                            {getLocalizedRenterName(renter.id, language)}
+                            {getLocalizedRenterName(renter.id, language) ||
+                              renter.fullName}
                           </div>
                         )}
                       </div>
@@ -563,7 +681,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                   {years.flatMap((y, yearIndex) =>
                     months.map((_, monthIndex) => {
                       const flatIndex = yearIndex * months.length + monthIndex;
-                      const snap = getSnapshot(
+                      const snap = getSnapshotLocal(
                         room.id,
                         y,
                         monthIndex as EthiopianMonthIndex,
@@ -651,6 +769,31 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                 </div>
               );
             })}
+
+            <div style={{ display: "contents" }}>
+              <div className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none">
+                <button
+                  type="button"
+                  onClick={() => setAddRenterOpen(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                >
+                  <span className="text-sm">+</span>
+                  <span>{language === "en" ? "Add renter" : "ተከራይ ጨምር"}</span>
+                </button>
+              </div>
+              {years.flatMap((y) =>
+                months.map((_, monthIndex) => (
+                  <div
+                    key={`add-row-${y}-${monthIndex}`}
+                    className={`border-b border-black px-2 py-2 ${
+                      monthIndex % 3 === 0 ? "border-l-2 border-l-zinc-300" : ""
+                    }`}
+                  >
+                    <div className="h-16 rounded-lg border border-zinc-200 bg-white" />
+                  </div>
+                )),
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -718,6 +861,184 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                   : language === "en"
                     ? "Mark as Paid"
                     : "ተከፍሏል"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addRenterOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-zinc-900">
+                {language === "en" ? "Add renter" : "ተከራይ ጨምር"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddRenterOpen(false);
+                  resetAddRenterForm();
+                }}
+                className="text-zinc-400 hover:text-zinc-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700">
+                  {language === "en" ? "Full name" : "ሙሉ ስም"}
+                </label>
+                <input
+                  value={newRenterFullName}
+                  onChange={(e) => setNewRenterFullName(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700">
+                  {language === "en" ? "Phone" : "ስልክ"}
+                </label>
+                <input
+                  value={newRenterPhone}
+                  onChange={(e) => setNewRenterPhone(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700">
+                  {language === "en" ? "National ID" : "መታወቂያ"}
+                </label>
+                <input
+                  value={newRenterNationalId}
+                  onChange={(e) => setNewRenterNationalId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    {language === "en" ? "Year" : "አመት"}
+                  </label>
+                  <input
+                    type="number"
+                    value={newRenterMoveInYear}
+                    onChange={(e) =>
+                      setNewRenterMoveInYear(Number(e.target.value))
+                    }
+                    className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    {language === "en" ? "Month" : "ወር"}
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setMonthPickerOpen((v) => !v)}
+                      className="mt-1 flex w-full items-center justify-between rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                    >
+                      <span>{months[newRenterMoveInMonthIndex]}</span>
+                      <span className="text-zinc-400">▾</span>
+                    </button>
+
+                    {monthPickerOpen && (
+                      <div className="absolute left-0 right-0 mt-1 rounded-md border border-zinc-200 bg-white p-2 shadow-lg z-50">
+                        <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-md border border-zinc-200">
+                          {months.map((m, idx) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => {
+                                setNewRenterMoveInMonthIndex(
+                                  idx as EthiopianMonthIndex,
+                                );
+                                setMonthPickerOpen(false);
+                              }}
+                              className={`border border-zinc-200 px-2 py-2 text-left text-xs font-medium hover:bg-zinc-50 ${
+                                idx === newRenterMoveInMonthIndex
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "text-zinc-700"
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    {language === "en" ? "Day" : "ቀን"}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={newRenterMoveInDay}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") {
+                        setNewRenterMoveInDay("");
+                        return;
+                      }
+                      if (/^\d{0,2}$/.test(v)) {
+                        setNewRenterMoveInDay(v);
+                      }
+                    }}
+                    className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700">
+                  {language === "en" ? "Photo" : "ፎቶ"}
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) =>
+                    handleNewRenterPhotoChange(e.target.files?.[0] ?? null)
+                  }
+                  className="mt-1 w-full text-sm"
+                />
+                {newRenterPhotoPreviewUrl && (
+                  <img
+                    src={newRenterPhotoPreviewUrl}
+                    alt="preview"
+                    className="mt-2 h-20 w-20 rounded-md object-cover border border-zinc-200"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddRenterOpen(false);
+                  resetAddRenterForm();
+                }}
+                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                {language === "en" ? "Cancel" : "ይቅር"}
+              </button>
+              <button
+                type="button"
+                onClick={handleAddRenterSubmit}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {language === "en" ? "Save" : "አስቀምጥ"}
               </button>
             </div>
           </div>
