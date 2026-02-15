@@ -66,6 +66,9 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // State to track paid status for manual toggling
+  const [paidStatuses, setPaidStatuses] = useState<Set<string>>(new Set());
+
   // Always show 2016 to 2020 (current year + 2 future years)
   const now = new Date();
   const ethiopianCurrentYear = toEthiopian(
@@ -89,9 +92,21 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       now.getMonth() + 1,
       now.getDate(),
     );
+
+    // Handle month indexing - remove Pagume from our array
+    let monthIndex = ethiopian.month - 1; // Convert to 0-based
+    if (ethiopian.month > 11) {
+      // If it's Pagume (month 12), map to Nehase (index 10)
+      monthIndex = 10;
+    } else if (ethiopian.month > 5) {
+      // Months after Yekatit (month 6) need to be shifted down by 1
+      // because we removed Pagume from our array
+      monthIndex = ethiopian.month - 1;
+    }
+
     return {
       year: ethiopian.year,
-      monthIndex: ethiopian.month - 1, // Convert to 0-based for our array
+      monthIndex: monthIndex,
       day: ethiopian.day,
     };
   };
@@ -206,6 +221,41 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     setCurrentPage(todayPage);
   };
 
+  // Handle cell click to toggle paid status
+  const handleCellClick = (
+    roomId: string,
+    year: number,
+    monthIndex: number,
+  ) => {
+    // Check if this month is in the past or current (not future)
+    const cellFlatIndex =
+      displayYears.findIndex((y) => y === year) * months.length + monthIndex;
+
+    if (cellFlatIndex > currentMonthFlatIndex) {
+      // Future month - don't allow clicking
+      return;
+    }
+
+    // Check if this cell is vacant (no renter during this period)
+    const snap = getSnapshot(roomId, year, monthIndex as EthiopianMonthIndex);
+    if (snap?.status === "vacant") {
+      // Vacant cells cannot be marked as paid
+      return;
+    }
+
+    // Toggle paid status
+    const key = `${roomId}-${year}-${monthIndex}`;
+    setPaidStatuses((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm">
       {/* Language switcher above the matrix */}
@@ -273,7 +323,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       </div>
       {/* Current day header */}
       <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
-        <div className="text-sm font-semibold text-zinc-900">
+        <div className="text-sm font-semibold text-zinc-900 truncate">
           {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
           {currentEthiopianDate.day}, {currentEthiopianDate.year}
         </div>
@@ -337,7 +387,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
               return (
                 <div
                   key={`${y}-${m}`}
-                  className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs ${
+                  className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs truncate ${
                     yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
                   } ${
                     flatIndex === currentMonthFlatIndex
@@ -425,7 +475,30 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                       y,
                       monthIndex as EthiopianMonthIndex,
                     );
-                    const status = snap?.status ?? "na";
+
+                    // Check if this cell is manually marked as paid
+                    const cellKey = `${room.id}-${y}-${monthIndex}`;
+                    const isManuallyPaid = paidStatuses.has(cellKey);
+
+                    // Determine status: manual paid takes priority, then original status
+                    let status: RentCellStatus;
+                    if (isManuallyPaid) {
+                      status = "paid";
+                    } else if (
+                      snap?.status === "paid" &&
+                      !paidStatuses.has(`${room.id}-${y}-${monthIndex}-unpaid`)
+                    ) {
+                      status = "paid";
+                    } else {
+                      status = snap?.status ?? "na";
+                    }
+
+                    // Check if this month is clickable (past or current) and not vacant
+                    const isClickable =
+                      flatIndex <= currentMonthFlatIndex &&
+                      snap?.status !== "vacant" &&
+                      snap?.status !== "paid";
+
                     return (
                       <div
                         key={`${room.id}-${y}-${monthIndex}`}
@@ -438,10 +511,16 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                         }`}
                       >
                         <div
-                          className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${cellClass(
-                            status,
-                          )}`}
+                          className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
+                            isClickable
+                              ? "cursor-pointer hover:border-blue-400"
+                              : "cursor-default"
+                          } ${cellClass(status)}`}
                           title={snap?.note ?? ""}
+                          onClick={() =>
+                            isClickable &&
+                            handleCellClick(room.id, y, monthIndex)
+                          }
                         >
                           {status === "paid" && (
                             <div className="absolute inset-0 flex items-center justify-center opacity-20">

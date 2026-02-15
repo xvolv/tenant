@@ -91,18 +91,11 @@ export const mockSnapshots: RentSnapshot[] = [
     status: "paid",
     paidDate: "15",
   }, // Nehase 2016
-  {
-    roomId: "r101",
-    year: 2016,
-    monthIndex: 12,
-    status: "paid",
-    paidDate: "15",
-  }, // Pagume 2016
   { roomId: "r101", year: 2017, monthIndex: 0, status: "paid", paidDate: "15" }, // Meskerem 2017
   { roomId: "r101", year: 2017, monthIndex: 1, status: "paid", paidDate: "15" }, // Tikimt 2017
   { roomId: "r101", year: 2017, monthIndex: 2, status: "paid", paidDate: "15" }, // Hidar 2017
   { roomId: "r101", year: 2017, monthIndex: 3, status: "paid", paidDate: "15" }, // Tahsas 2017
-  { roomId: "r101", year: 2017, monthIndex: 4, status: "paid", paidDate: "15" }, // Tahsas 2017
+  { roomId: "r101", year: 2017, monthIndex: 4, status: "paid", paidDate: "15" }, // Tir 2017
   { roomId: "r101", year: 2017, monthIndex: 5, status: "paid", paidDate: "15" }, // Yekatit 2017
   { roomId: "r101", year: 2017, monthIndex: 6, status: "paid", paidDate: "15" }, // Megabit 2017
   { roomId: "r101", year: 2017, monthIndex: 7, status: "paid", paidDate: "15" }, // Miyazya 2017
@@ -122,18 +115,11 @@ export const mockSnapshots: RentSnapshot[] = [
     status: "paid",
     paidDate: "15",
   }, // Nehase 2017
-  {
-    roomId: "r101",
-    year: 2017,
-    monthIndex: 12,
-    status: "paid",
-    paidDate: "15",
-  }, // Pagume 2017
   { roomId: "r101", year: 2018, monthIndex: 0, status: "paid", paidDate: "15" }, // Meskerem 2018
   { roomId: "r101", year: 2018, monthIndex: 1, status: "paid", paidDate: "15" }, // Tikimt 2018
   { roomId: "r101", year: 2018, monthIndex: 2, status: "paid", paidDate: "15" }, // Hidar 2018
   { roomId: "r101", year: 2018, monthIndex: 3, status: "paid", paidDate: "15" }, // Tahsas 2018
-  { roomId: "r101", year: 2018, monthIndex: 4, status: "paid", paidDate: "15" }, // Tahsas 2018
+  { roomId: "r101", year: 2018, monthIndex: 4, status: "paid", paidDate: "15" }, // Tir 2018
   { roomId: "r101", year: 2018, monthIndex: 5, status: "na" }, // Today Yekatit 8 - waiting for 15th
 
   // Room 2 (Maria) - moved in Yekatit 1, 2017, pays starting from Megabit 2017
@@ -159,7 +145,7 @@ export const mockSnapshots: RentSnapshot[] = [
   { roomId: "r102", year: 2018, monthIndex: 1, status: "paid", paidDate: "01" }, // Tikimt 2018
   { roomId: "r102", year: 2018, monthIndex: 2, status: "paid", paidDate: "01" }, // Hidar 2018
   { roomId: "r102", year: 2018, monthIndex: 3, status: "paid", paidDate: "01" }, // Tahsas 2018
-  { roomId: "r102", year: 2018, monthIndex: 4, status: "paid", paidDate: "01" }, // Tahsas 2018
+  { roomId: "r102", year: 2018, monthIndex: 4, status: "paid", paidDate: "01" }, // Tir 2018
   { roomId: "r102", year: 2018, monthIndex: 5, status: "paid", paidDate: "01" }, // Yekatit 2018 - paid on 1st
 
   // Room 3 (Johnathan) - moved in Tahsas 10, 2017, pays starting from Yekatit 2017
@@ -186,7 +172,7 @@ export const mockSnapshots: RentSnapshot[] = [
   { roomId: "r103", year: 2018, monthIndex: 1, status: "paid", paidDate: "10" }, // Tikimt 2018
   { roomId: "r103", year: 2018, monthIndex: 2, status: "paid", paidDate: "10" }, // Hidar 2018
   { roomId: "r103", year: 2018, monthIndex: 3, status: "paid", paidDate: "10" }, // Tahsas 2018
-  { roomId: "r103", year: 2018, monthIndex: 4, status: "paid", paidDate: "10" }, // Tahsas 2018
+  { roomId: "r103", year: 2018, monthIndex: 4, status: "paid", paidDate: "10" }, // Tir 2018
   { roomId: "r103", year: 2018, monthIndex: 5, status: "na" }, // Today Yekatit 8 - waiting for 10th
 ];
 
@@ -251,5 +237,9 @@ export function formatEthiopianDate(
   const weekdays = getLocalizedWeekdays(language);
   const month = months[input.monthIndex] ?? "";
   const weekday = weekdays[input.day % 7] ?? "";
-  return `${month} ${input.day} ${weekday}`;
+
+  // Use only first 3 letters for English weekdays to prevent overflow
+  const shortWeekday = language === "en" ? weekday.slice(0, 3) : weekday;
+
+  return `${month} ${input.day} ${shortWeekday}`;
 }
