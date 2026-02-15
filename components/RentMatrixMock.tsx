@@ -10,6 +10,7 @@ import {
   EthiopianMonthIndex,
 } from "@/lib/mockData";
 import { useEffect, useRef, useState } from "react";
+import { toEthiopian } from "ethiopian-calendar-new";
 
 type Props = {
   startYear: number;
@@ -20,10 +21,6 @@ function cellClass(status: RentCellStatus) {
   switch (status) {
     case "paid":
       return "bg-emerald-50 text-emerald-800 border-emerald-100 relative overflow-hidden";
-    case "partial":
-      return "bg-amber-50 text-amber-800 border-amber-100";
-    case "overdue":
-      return "bg-white text-rose-700 border-rose-300";
     case "vacant":
       return "bg-zinc-100 text-zinc-500 border-zinc-200";
     default:
@@ -34,11 +31,7 @@ function cellClass(status: RentCellStatus) {
 function cellLabel(status: RentCellStatus, paidDate?: string) {
   switch (status) {
     case "paid":
-      return paidDate ? `${paidDate} ✓` : "✓";
-    case "partial":
-      return paidDate ? `${paidDate} ~` : "PART";
-    case "overdue":
-      return "OVERDUE";
+      return `${paidDate ?? ""}✅`;
     case "vacant":
       return "VACANT";
     default:
@@ -54,45 +47,18 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const monthMinWidth = 70;
   const gridMinWidth = 240 + 3 * monthMinWidth; // Only 3 months visible at a time
 
-  // Dynamic Ethiopian date conversion
+  // Use ethiopian-calendar-new library for accurate conversion
   const getCurrentEthiopianDate = () => {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1; // 1-12
-    const day = now.getDate();
-
-    // Ethiopian New Year is September 11 (or September 12 on leap years)
-    let ethiopianYear = year - 8;
-    let ethiopianMonth = month - 8;
-    let ethiopianDay = day + 10;
-
-    if (ethiopianMonth <= 0) {
-      ethiopianMonth += 12;
-      ethiopianYear -= 1;
-    }
-
-    // Handle leap year adjustments
-    if (month === 9 && day >= 11) {
-      ethiopianYear += 1;
-      ethiopianMonth = 1;
-      ethiopianDay = day - 10;
-    }
-
-    // Normalize day if it exceeds month days
-    const ethiopianMonthDays = [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30]; // All Ethiopian months have 30 days
-    if (ethiopianDay > ethiopianMonthDays[ethiopianMonth - 1]) {
-      ethiopianDay -= ethiopianMonthDays[ethiopianMonth - 1];
-      ethiopianMonth += 1;
-      if (ethiopianMonth > 12) {
-        ethiopianMonth = 1;
-        ethiopianYear += 1;
-      }
-    }
-
+    const ethiopian = toEthiopian(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      now.getDate(),
+    );
     return {
-      year: ethiopianYear,
-      monthIndex: ethiopianMonth - 1,
-      day: ethiopianDay,
+      year: ethiopian.year,
+      monthIndex: ethiopian.month - 1, // Convert to 0-based for our array
+      day: ethiopian.day,
     };
   };
 
@@ -107,12 +73,60 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const totalPages = Math.ceil(totalMonths / 3);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isScrolling = useRef(false);
+  const [visibleYear, setVisibleYear] = useState(startYear);
 
   useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft = currentPage * 3 * monthMinWidth;
+      const threeMonthWidth = 3 * monthMinWidth;
+      const scrollPosition = currentPage * threeMonthWidth;
+      scrollContainerRef.current.scrollLeft = scrollPosition;
     }
   }, [currentPage, monthMinWidth]);
+
+  // Sync hand scroll with page state
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let scrollTimeout: NodeJS.Timeout;
+
+    const handleScroll = () => {
+      isScrolling.current = true;
+      clearTimeout(scrollTimeout);
+
+      scrollTimeout = setTimeout(() => {
+        isScrolling.current = false;
+        const threeMonthWidth = 3 * monthMinWidth;
+        const newPage = Math.round(container.scrollLeft / threeMonthWidth);
+        if (newPage !== currentPage && newPage >= 0 && newPage < totalPages) {
+          setCurrentPage(newPage);
+        }
+
+        // Calculate visible year based on scroll position
+        const scrollLeft = container.scrollLeft;
+        const monthIndex = Math.floor(scrollLeft / monthMinWidth);
+        const yearIndex = Math.floor(monthIndex / months.length);
+        const currentYear = years[yearIndex];
+        if (currentYear && currentYear !== visibleYear) {
+          setVisibleYear(currentYear);
+        }
+      }, 150);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [
+    currentPage,
+    totalPages,
+    monthMinWidth,
+    visibleYear,
+    years,
+    months.length,
+  ]);
 
   const handleNext = () => {
     setCurrentPage((p) => Math.min(p + 1, totalPages - 1));
@@ -120,6 +134,11 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
 
   const handlePrev = () => {
     setCurrentPage((p) => Math.max(p - 1, 0));
+  };
+
+  const handleToday = () => {
+    const todayPage = Math.floor(currentMonthFlatIndex / 3);
+    setCurrentPage(todayPage);
   };
 
   return (
@@ -139,9 +158,12 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
         >
           ← Previous 3
         </button>
-        <span className="text-xs text-zinc-500">
-          {currentPage + 1} / {totalPages}
-        </span>
+        <button
+          onClick={handleToday}
+          className="h-8 rounded-md bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
+        >
+          Move to Today
+        </button>
         <button
           onClick={handleNext}
           disabled={currentPage === totalPages - 1}
@@ -150,16 +172,21 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
           Next 3 →
         </button>
       </div>
-      <div className="overflow-x-auto" ref={scrollContainerRef}>
+      <div
+        className="overflow-x-auto scroll-smooth snap-x snap-mandatory relative"
+        ref={scrollContainerRef}
+        style={{ scrollPaddingLeft: "0px" }}
+      >
         <div
           style={{
             minWidth: totalMonths * monthMinWidth + 200, // Full width for all months
             display: "grid",
             gridTemplateColumns: `${metaColWidth} repeat(${totalMonths}, minmax(${monthMinWidth}px, 1fr))`,
+            scrollSnapAlign: "start",
           }}
         >
-          <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-zinc-500 sm:px-4 sm:text-xs">
-            YEAR
+          <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-blue-800 sm:px-4 sm:text-xs">
+            {visibleYear}
           </div>
           {years.map((y, yearIndex) => (
             <div
