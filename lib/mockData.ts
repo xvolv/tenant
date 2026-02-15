@@ -19,6 +19,7 @@ export type Renter = {
   fullName: string;
   phone: string;
   roomId: string;
+  nationalId: string;
   moveIn: { year: number; monthIndex: EthiopianMonthIndex; day: number };
   moveOut?: { year: number; monthIndex: EthiopianMonthIndex; day: number };
 };
@@ -48,6 +49,7 @@ export const mockRenters: Renter[] = [
     fullName: "Alex Johnson",
     phone: "+251 91 234 5678",
     roomId: "r101",
+    nationalId: "ETH123456",
     moveIn: { year: 2016, monthIndex: 4, day: 15 }, // Tahsas 15, 2016
   },
   {
@@ -55,6 +57,7 @@ export const mockRenters: Renter[] = [
     fullName: "Maria Garcia",
     phone: "+251 92 345 6789",
     roomId: "r102",
+    nationalId: "ETH789012",
     moveIn: { year: 2017, monthIndex: 6, day: 1 }, // Yekatit 1, 2017
   },
   {
@@ -62,6 +65,7 @@ export const mockRenters: Renter[] = [
     fullName: "Johnathan Doe",
     phone: "+251 93 456 7890",
     roomId: "r103",
+    nationalId: "ETH345678",
     moveIn: { year: 2017, monthIndex: 5, day: 10 }, // Tahsas 10, 2017
   },
 ];

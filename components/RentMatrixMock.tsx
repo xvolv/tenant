@@ -188,6 +188,11 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     };
   }, []);
 
+  // Generate avatar URL using national ID
+  const getAvatarUrl = (nationalId: string) => {
+    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${nationalId}`;
+  };
+
   // Handle room click to show renter modal
   const handleRoomClick = (room: Room) => {
     const renter = findRenterByRoom(room.id);
@@ -357,18 +362,58 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                   className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none cursor-pointer hover:bg-zinc-300 transition-colors"
                   onClick={() => handleRoomClick(room)}
                 >
-                  {renter && (
-                    <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
-                      {getLocalizedRenterName(renter.id, language)}
+                  {/* Grid Layout: 2 columns, 2 rows */}
+                  <div className="grid grid-cols-[auto_1fr] grid-rows-2 gap-x-2 gap-y-1">
+                    {/* Avatar - Top Left */}
+                    {renter && (
+                      <div className="row-span-2 flex items-start justify-center">
+                        <div className="relative flex-shrink-0">
+                          <img
+                            src={getAvatarUrl(renter.nationalId)}
+                            alt={getLocalizedRenterName(renter.id, language)}
+                            className="w-6 h-6 rounded-full object-cover border border-zinc-300"
+                          />
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Renter Name - Top Right */}
+                    <div className="flex items-center">
+                      {renter && (
+                        <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
+                          {getLocalizedRenterName(renter.id, language)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div className="mt-0.5 truncate text-sm font-semibold text-zinc-900">
-                    {getLocalizedRoomName(room.id, language)}
-                  </div>
-                  <div className="mt-1 truncate text-xs text-zinc-500">
-                    {renter?.moveIn
-                      ? formatEthiopianDate(renter.moveIn, language)
-                      : ""}
+
+                    {/* Room Name - Bottom Left (if no renter) or Empty */}
+                    {!renter && (
+                      <div className="flex items-center">
+                        <div className="text-sm font-semibold text-zinc-900">
+                          {getLocalizedRoomName(room.id, language)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Move-in Date - Bottom Right (spans full width if no avatar) */}
+                    <div
+                      className={`flex items-end ${!renter ? "col-span-2" : ""} mb-2`}
+                    >
+                      <div className="truncate text-xs font-bold text-zinc-700">
+                        {renter ? (
+                          renter.moveIn ? (
+                            formatEthiopianDate(renter.moveIn, language)
+                          ) : (
+                            ""
+                          )
+                        ) : (
+                          <div className="text-sm font-semibold text-zinc-900">
+                            {getLocalizedRoomName(room.id, language)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
