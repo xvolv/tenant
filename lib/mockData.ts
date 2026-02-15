@@ -1,3 +1,10 @@
+import {
+  Language,
+  DEFAULT_LANGUAGE,
+  getLocalizedMonths,
+  getLocalizedWeekdays,
+} from "./localization";
+
 export type EthiopianMonthIndex = number; // 0..11
 
 export type RentCellStatus = "paid" | "vacant" | "na";
@@ -25,30 +32,9 @@ export type RentSnapshot = {
   note?: string;
 };
 
-export const ETHIOPIAN_MONTHS = [
-  "መስከረም",
-  "ጥቅምት",
-  "ኅዳር",
-  "ታኅሣሥ",
-  "ጥር",
-  "የካቲት",
-  "መጋቢት",
-  "ሚያዝያ",
-  "ግንቦት",
-  "ሰኔ",
-  "ሐምሌ",
-  "ነሐሴ",
-] as const;
-
-const ETHIOPIAN_WEEKDAYS = [
-  "ሰኞ",
-  "ማክሰኞ",
-  "ረቡዕ",
-  "ሐሙስ",
-  "አርብ",
-  "ቅዳሜ",
-  "እሑድ",
-] as const;
+// Export localized months for backward compatibility
+export const ETHIOPIAN_MONTHS = getLocalizedMonths(DEFAULT_LANGUAGE);
+export const ETHIOPIAN_WEEKDAYS = getLocalizedWeekdays(DEFAULT_LANGUAGE);
 
 export const mockRooms: Room[] = [
   { id: "r101", roomNo: "ROOM 1" },
@@ -165,13 +151,6 @@ export const mockSnapshots: RentSnapshot[] = [
     status: "paid",
     paidDate: "01",
   }, // Nehase 2017
-  {
-    roomId: "r102",
-    year: 2017,
-    monthIndex: 12,
-    status: "paid",
-    paidDate: "01",
-  }, // Pagume 2017
   { roomId: "r102", year: 2018, monthIndex: 0, status: "paid", paidDate: "01" }, // Meskerem 2018
   { roomId: "r102", year: 2018, monthIndex: 1, status: "paid", paidDate: "01" }, // Tikimt 2018
   { roomId: "r102", year: 2018, monthIndex: 2, status: "paid", paidDate: "01" }, // Hidar 2018
@@ -199,13 +178,6 @@ export const mockSnapshots: RentSnapshot[] = [
     status: "paid",
     paidDate: "10",
   }, // Nehase 2017
-  {
-    roomId: "r103",
-    year: 2017,
-    monthIndex: 12,
-    status: "paid",
-    paidDate: "10",
-  }, // Pagume 2017
   { roomId: "r103", year: 2018, monthIndex: 0, status: "paid", paidDate: "10" }, // Meskerem 2018
   { roomId: "r103", year: 2018, monthIndex: 1, status: "paid", paidDate: "10" }, // Tikimt 2018
   { roomId: "r103", year: 2018, monthIndex: 2, status: "paid", paidDate: "10" }, // Hidar 2018
@@ -263,12 +235,17 @@ export function getSnapshot(
   };
 }
 
-export function formatEthiopianDate(input: {
-  year: number;
-  monthIndex: EthiopianMonthIndex;
-  day: number;
-}) {
-  const month = ETHIOPIAN_MONTHS[input.monthIndex] ?? "";
-  const weekday = ETHIOPIAN_WEEKDAYS[input.day % 7] ?? "";
+export function formatEthiopianDate(
+  input: {
+    year: number;
+    monthIndex: EthiopianMonthIndex;
+    day: number;
+  },
+  language: Language = DEFAULT_LANGUAGE,
+) {
+  const months = getLocalizedMonths(language);
+  const weekdays = getLocalizedWeekdays(language);
+  const month = months[input.monthIndex] ?? "";
+  const weekday = weekdays[input.day % 7] ?? "";
   return `${month} ${input.day} ${weekday}`;
 }
