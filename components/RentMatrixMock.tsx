@@ -20,6 +20,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toEthiopian } from "ethiopian-calendar-new";
 import RenterModal from "./RenterModal";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   getRooms,
   createRoom,
@@ -62,8 +63,7 @@ function cellLabel(
 }
 
 export default function RentMatrixMock({ startYear, yearsCount }: Props) {
-  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
-  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const { language } = useLanguage();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [renters, setRenters] = useState<Renter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,6 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     renter: Renter;
     roomId: string;
   } | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Load data from database on component mount
   useEffect(() => {
@@ -258,23 +257,6 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const handlePrev = () => {
     setCurrentPage((p) => Math.max(p - 1, 0));
   };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowLanguageDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   // Generate avatar URL using national ID
   const getAvatarUrl = (nationalId: string) => {
@@ -624,69 +606,6 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
             isAnyModalOpen ? "blur-sm pointer-events-none select-none" : ""
           }`}
         >
-          {/* Language switcher above the matrix */}
-          <div className="flex justify-end px-4 py-2 border-b border-black bg-zinc-50">
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-                className="flex items-center gap-2 h-8 rounded-md bg-white border border-zinc-300 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-              >
-                <span>🌐</span>
-                <span>{LANGUAGE_INFO[language].flag}</span>
-                <span className="hidden sm:inline">
-                  {LANGUAGE_INFO[language].name}
-                </span>
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-
-              {showLanguageDropdown && (
-                <div className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-md shadow-lg z-50">
-                  {Object.entries(LANGUAGE_INFO).map(([langCode, info]) => (
-                    <button
-                      key={langCode}
-                      onClick={() => {
-                        setLanguage(langCode as Language);
-                        setShowLanguageDropdown(false);
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-50 ${
-                        language === langCode
-                          ? "bg-zinc-100 text-zinc-900"
-                          : "text-zinc-700"
-                      }`}
-                    >
-                      <span>{info.flag}</span>
-                      <span>{info.name}</span>
-                      {language === langCode && (
-                        <svg
-                          className="w-3 h-3 ml-auto"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
           {/* Current day header */}
           <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
             <div className="text-sm font-semibold text-zinc-900 truncate">

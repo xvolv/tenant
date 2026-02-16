@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
-    "db:clean": "tsx prisma/seed-clean.ts"
+    "db:clean": "tsx prisma/seed-clean.ts",
+    "db:test": "tsx prisma/seed-test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -17,6 +18,7 @@
     "@prisma/client": "^6.19.2",
     "ethiopian-calendar-new": "^1.1.0",
     "kenat": "^3.2.0",
+    "lucide-react": "^0.564.0",
     "next": "16.1.6",
     "prisma": "^6.19.2",
     "react": "19.2.3",
