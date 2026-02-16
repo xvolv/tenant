@@ -283,6 +283,15 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     setSelectedRenter(null);
   };
 
+  const handleUpdateRenter = (updated: Renter) => {
+    setRenters((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setSelectedRenter((prev) =>
+      prev && prev.renter.id === updated.id
+        ? { ...prev, renter: updated }
+        : prev,
+    );
+  };
+
   const handleNewRenterPhotoChange = (file: File | null) => {
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -827,6 +836,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
           language={language}
           onClose={() => setSelectedRenter(null)}
           onDelete={handleDeleteRenter}
+          onUpdate={handleUpdateRenter}
         />
       )}
 
