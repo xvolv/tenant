@@ -9,11 +9,13 @@ import { toGregorian } from "ethiopian-calendar-new";
 
 export type EthiopianMonthIndex = number; // 0..11
 
-export type RentCellStatus = "paid" | "vacant" | "na";
+export type RentCellStatus = "paid" | "unpaid" | "vacant" | "na";
 
 export type Room = {
   id: string;
-  roomNo: string;
+  name: string;
+  renters: Renter[];
+  rentPayments: RentPayment[];
 };
 
 export type Renter = {
@@ -24,6 +26,7 @@ export type Renter = {
   nationalId: string;
   moveIn: { year: number; monthIndex: EthiopianMonthIndex; day: number };
   moveOut?: { year: number; monthIndex: EthiopianMonthIndex; day: number };
+  photoUrl?: string;
 };
 
 export type RentSnapshot = {
@@ -35,14 +38,29 @@ export type RentSnapshot = {
   note?: string;
 };
 
+export type RentPayment = {
+  id: string;
+  roomId: string;
+  renterId?: string;
+  year: number;
+  monthIndex: number;
+  isPaid: boolean;
+};
+
+export type EthiopianDate = {
+  year: number;
+  monthIndex: EthiopianMonthIndex;
+  day: number;
+};
+
 // Export localized months for backward compatibility
 export const ETHIOPIAN_MONTHS = getLocalizedMonths(DEFAULT_LANGUAGE);
 export const ETHIOPIAN_WEEKDAYS = getLocalizedWeekdays(DEFAULT_LANGUAGE);
 
 export const mockRooms: Room[] = [
-  { id: "r101", roomNo: "ROOM 1" },
-  { id: "r102", roomNo: "ROOM 2" },
-  { id: "r103", roomNo: "ROOM 3" },
+  { id: "r101", name: "ROOM 1", renters: [], rentPayments: [] },
+  { id: "r102", name: "ROOM 2", renters: [], rentPayments: [] },
+  { id: "r103", name: "ROOM 3", renters: [], rentPayments: [] },
 ];
 
 export const mockRenters: Renter[] = [

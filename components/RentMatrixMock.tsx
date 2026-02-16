@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  mockRooms,
-  mockRenters,
-  mockSnapshots,
   formatEthiopianDate,
   type Room,
   type Renter,
@@ -20,9 +17,18 @@ import {
   getLocalizedRoomName,
   LANGUAGE_INFO,
 } from "@/lib/localization";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toEthiopian } from "ethiopian-calendar-new";
 import RenterModal from "./RenterModal";
+import {
+  getRooms,
+  createRoom,
+  createRenter,
+  updateRenter,
+  deleteRenter,
+  updateRentPayment,
+  deleteRoom,
+} from "@/lib/database-api";
 
 type Props = {
   startYear: number;
@@ -58,8 +64,9 @@ function cellLabel(
 export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
-  const [rooms, setRooms] = useState<Room[]>(mockRooms);
-  const [renters, setRenters] = useState<Renter[]>(mockRenters);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [renters, setRenters] = useState<Renter[]>([]);
+  const [loading, setLoading] = useState(true);
   const [renterPhotoUrl, setRenterPhotoUrl] = useState<Record<string, string>>(
     {},
   );
@@ -68,6 +75,24 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     roomId: string;
   } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load data from database on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const roomsData = await getRooms();
+        const allRenters = roomsData.flatMap((room) => room.renters);
+        setRooms(roomsData);
+        setRenters(allRenters);
+      } catch (error) {
+        console.error("Failed to load data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   // State to track paid status for manual toggling
   const [paidStatuses, setPaidStatuses] = useState<Set<string>>(new Set());
@@ -149,6 +174,38 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       scrollContainerRef.current.scrollLeft = scrollPosition;
     }
   }, [currentPage, monthMinWidth]);
+
+  // Scroll to today on initial load with retry mechanism
+  useLayoutEffect(() => {
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    const attemptScroll = () => {
+      if (scrollContainerRef.current) {
+        const todayPage = Math.floor(currentMonthFlatIndex / 3);
+        const threeMonthWidth = 3 * monthMinWidth;
+        const scrollPosition = todayPage * threeMonthWidth;
+
+        // Check if we can actually scroll (element has scrollable content)
+        if (
+          scrollContainerRef.current.scrollWidth >
+          scrollContainerRef.current.clientWidth
+        ) {
+          scrollContainerRef.current.scrollLeft = scrollPosition;
+          return true; // Success
+        }
+      }
+
+      attempts++;
+      if (attempts < maxAttempts) {
+        // Try again with increasing delays
+        setTimeout(attemptScroll, 50 * attempts);
+      }
+      return false;
+    };
+
+    attemptScroll();
+  }, [currentMonthFlatIndex, monthMinWidth]); // Add dependencies to recalculate if values change
 
   // Sync hand scroll with page state
   useEffect(() => {
@@ -233,14 +290,30 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     year: number,
     monthIndex: EthiopianMonthIndex,
   ): RentSnapshot | undefined => {
-    const explicitSnapshot = mockSnapshots.find(
-      (s) =>
-        s.roomId === roomId && s.year === year && s.monthIndex === monthIndex,
+    // Find the room and its rent payments
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return undefined;
+
+    // Check if there's a rent payment record for this month
+    const payment = room.rentPayments?.find(
+      (p) => p.year === year && p.monthIndex === monthIndex,
     );
-    if (explicitSnapshot) return explicitSnapshot;
+
+    if (payment) {
+      return {
+        roomId,
+        year,
+        monthIndex,
+        status: payment.isPaid ? "paid" : "unpaid",
+        paidDate: payment.isPaid
+          ? new Date().toISOString().split("T")[0]
+          : undefined,
+      };
+    }
 
     const renter = findRenterByRoomLocal(roomId);
     if (renter) {
+      // Check if this month is before renter moved in
       const moveInDate = new Date(
         renter.moveIn.year,
         renter.moveIn.monthIndex,
@@ -250,6 +323,21 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       if (currentDate < moveInDate) {
         return { roomId, year, monthIndex, status: "vacant" };
       }
+
+      // Check if renter moved out
+      if (renter.moveOut) {
+        const moveOutDate = new Date(
+          renter.moveOut.year,
+          renter.moveOut.monthIndex,
+          renter.moveOut.day,
+        );
+        if (currentDate > moveOutDate) {
+          return { roomId, year, monthIndex, status: "vacant" };
+        }
+      }
+
+      // Default to unpaid for occupied months
+      return { roomId, year, monthIndex, status: "unpaid" };
     }
 
     return { roomId, year, monthIndex, status: "na" };
@@ -263,33 +351,52 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     }
   };
 
-  const handleDeleteRenter = (renterId: string, roomId: string) => {
-    setRenters((prev) => prev.filter((r) => r.id !== renterId));
-    setRooms((prev) => prev.filter((room) => room.id !== roomId));
-    setRenterPhotoUrl((prev) => {
-      if (!(renterId in prev)) return prev;
-      const { [renterId]: _, ...rest } = prev;
-      return rest;
-    });
-    setPaidStatuses((prev) => {
-      const next = new Set<string>();
-      for (const key of prev) {
-        if (!key.startsWith(`${roomId}-`)) {
-          next.add(key);
+  const handleDeleteRenter = async (renterId: string, roomId: string) => {
+    try {
+      await deleteRenter(renterId);
+      await deleteRoom(roomId);
+      setRenters((prev) => prev.filter((r) => r.id !== renterId));
+      setRooms((prev) => prev.filter((room) => room.id !== roomId));
+      setRenterPhotoUrl((prev) => {
+        if (!(renterId in prev)) return prev;
+        const { [renterId]: _, ...rest } = prev;
+        return rest;
+      });
+      setPaidStatuses((prev) => {
+        const next = new Set<string>();
+        for (const key of prev) {
+          if (!key.startsWith(`${roomId}-`)) {
+            next.add(key);
+          }
         }
-      }
-      return next;
-    });
-    setSelectedRenter(null);
+        return next;
+      });
+      setSelectedRenter(null);
+    } catch (error) {
+      console.error("Failed to delete renter:", error);
+    }
   };
 
-  const handleUpdateRenter = (updated: Renter) => {
-    setRenters((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-    setSelectedRenter((prev) =>
-      prev && prev.renter.id === updated.id
-        ? { ...prev, renter: updated }
-        : prev,
-    );
+  const handleUpdateRenter = async (updated: Renter) => {
+    try {
+      await updateRenter(updated.id, {
+        fullName: updated.fullName,
+        phone: updated.phone,
+        nationalId: updated.nationalId,
+        moveIn: updated.moveIn,
+        photoUrl: updated.photoUrl,
+      });
+      setRenters((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r)),
+      );
+      setSelectedRenter((prev) =>
+        prev && prev.renter.id === updated.id
+          ? { ...prev, renter: updated }
+          : prev,
+      );
+    } catch (error) {
+      console.error("Failed to update renter:", error);
+    }
   };
 
   const handleNewRenterPhotoChange = (file: File | null) => {
@@ -309,7 +416,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     setMonthPickerOpen(false);
   };
 
-  const handleAddRenterSubmit = () => {
+  const handleAddRenterSubmit = async () => {
     const fullName = newRenterFullName.trim();
     const phone = newRenterPhone.trim();
     const nationalId = newRenterNationalId.trim();
@@ -317,42 +424,51 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     if (!fullName || !phone || !nationalId) return;
     if (!Number.isFinite(moveInDay) || moveInDay < 1 || moveInDay > 30) return;
 
-    const roomNumber = rooms.length + 1;
-    const newRoom: Room = {
-      id: `room-${roomNumber}`,
-      roomNo: `ROOM ${roomNumber}`,
-    };
+    try {
+      const roomNumber = rooms.length + 1;
+      const newRoom = await createRoom(`ROOM ${roomNumber}`);
 
-    const renterNumber = renters.length + 1;
-    const newRenter: Renter = {
-      id: `t${renterNumber}`,
-      fullName,
-      phone,
-      roomId: newRoom.id,
-      nationalId,
-      moveIn: {
-        year: Number(newRenterMoveInYear),
-        monthIndex: newRenterMoveInMonthIndex,
-        day: moveInDay,
-      },
-    };
+      const newRenter = await createRenter({
+        fullName,
+        phone,
+        nationalId,
+        roomId: newRoom.id,
+        moveIn: {
+          year: Number(newRenterMoveInYear),
+          monthIndex: newRenterMoveInMonthIndex,
+          day: moveInDay,
+        },
+        photoUrl: newRenterPhotoPreviewUrl || undefined,
+      });
 
-    setRooms((prev) => [...prev, newRoom]);
-    setRenters((prev) => [...prev, newRenter]);
-    if (newRenterPhotoPreviewUrl) {
-      setRenterPhotoUrl((prev) => ({
-        ...prev,
-        [newRenter.id]: newRenterPhotoPreviewUrl,
-      }));
+      setRooms((prev) => [...prev, newRoom]);
+      setRenters((prev) => [...prev, newRenter]);
+      if (newRenterPhotoPreviewUrl) {
+        setRenterPhotoUrl((prev) => ({
+          ...prev,
+          [newRenter.id]: newRenterPhotoPreviewUrl,
+        }));
+      }
+
+      setAddRenterOpen(false);
+      resetAddRenterForm();
+    } catch (error) {
+      console.error("Failed to add renter:", error);
     }
-
-    setAddRenterOpen(false);
-    resetAddRenterForm();
   };
 
   const handleToday = () => {
     const todayPage = Math.floor(currentMonthFlatIndex / 3);
     setCurrentPage(todayPage);
+
+    // Also directly scroll to ensure it works
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        const threeMonthWidth = 3 * monthMinWidth;
+        const scrollPosition = todayPage * threeMonthWidth;
+        scrollContainerRef.current.scrollLeft = scrollPosition;
+      }
+    }, 50); // Small delay to ensure the DOM has updated
   };
 
   // Handle cell click to toggle paid status
@@ -440,26 +556,38 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   };
 
   // Handle confirming payment action
-  const handleConfirmPaymentAction = () => {
+  const handleConfirmPaymentAction = async () => {
     if (!paymentWarning) return;
 
-    const key = `${paymentWarning.roomId}-${paymentWarning.year}-${paymentWarning.monthIndex}`;
-    setPaidStatuses((prev) => {
-      const newSet = new Set(prev);
+    try {
+      const isPaid = paymentWarning.action !== "unmark-paid";
+      await updateRentPayment(
+        paymentWarning.roomId,
+        paymentWarning.year,
+        paymentWarning.monthIndex,
+        isPaid,
+      );
 
-      if (paymentWarning.action === "unmark-paid") {
-        // Remove from paid status
-        newSet.delete(key);
-      } else {
-        // Add to paid status (both early and normal)
-        newSet.add(key);
-      }
+      const key = `${paymentWarning.roomId}-${paymentWarning.year}-${paymentWarning.monthIndex}`;
+      setPaidStatuses((prev) => {
+        const newSet = new Set(prev);
 
-      return newSet;
-    });
+        if (paymentWarning.action === "unmark-paid") {
+          // Remove from paid status
+          newSet.delete(key);
+        } else {
+          // Add to paid status (both early and normal)
+          newSet.add(key);
+        }
 
-    // Close warning modal
-    setPaymentWarning(null);
+        return newSet;
+      });
+
+      // Close warning modal
+      setPaymentWarning(null);
+    } catch (error) {
+      console.error("Failed to update payment status:", error);
+    }
   };
 
   // Handle canceling payment action
@@ -486,352 +614,367 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
 
   return (
     <div className="relative">
-      <div
-        className={`mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm ${
-          isAnyModalOpen ? "blur-sm pointer-events-none select-none" : ""
-        }`}
-      >
-        {/* Language switcher above the matrix */}
-        <div className="flex justify-end px-4 py-2 border-b border-black bg-zinc-50">
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-              className="flex items-center gap-2 h-8 rounded-md bg-white border border-zinc-300 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              <span>🌐</span>
-              <span>{LANGUAGE_INFO[language].flag}</span>
-              <span className="hidden sm:inline">
-                {LANGUAGE_INFO[language].name}
-              </span>
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-
-            {showLanguageDropdown && (
-              <div className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-md shadow-lg z-50">
-                {Object.entries(LANGUAGE_INFO).map(([langCode, info]) => (
-                  <button
-                    key={langCode}
-                    onClick={() => {
-                      setLanguage(langCode as Language);
-                      setShowLanguageDropdown(false);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-50 ${
-                      language === langCode
-                        ? "bg-zinc-100 text-zinc-900"
-                        : "text-zinc-700"
-                    }`}
-                  >
-                    <span>{info.flag}</span>
-                    <span>{info.name}</span>
-                    {language === langCode && (
-                      <svg
-                        className="w-3 h-3 ml-auto"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-sm text-zinc-500">Loading...</div>
         </div>
-        {/* Current day header */}
-        <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
-          <div className="text-sm font-semibold text-zinc-900 truncate">
-            {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
-            {currentEthiopianDate.day}, {currentEthiopianDate.year}
-          </div>
-        </div>
-        <div className="flex items-center justify-between px-4 py-2 border-b border-black">
-          <button
-            onClick={handlePrev}
-            disabled={currentPage === 0}
-            className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {getLocalizedText("previous3", language)}
-          </button>
-          <button
-            onClick={handleToday}
-            className="h-8 rounded-md bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
-          >
-            {getLocalizedText("moveToToday", language)}
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={currentPage === totalPages - 1}
-            className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {getLocalizedText("next3", language)}
-          </button>
-        </div>
+      ) : (
         <div
-          className="overflow-x-auto scroll-smooth snap-x snap-mandatory relative"
-          ref={scrollContainerRef}
-          style={{ scrollPaddingLeft: "0px" }}
+          className={`mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm ${
+            isAnyModalOpen ? "blur-sm pointer-events-none select-none" : ""
+          }`}
         >
-          <div
-            style={{
-              minWidth: totalMonths * monthMinWidth + 200, // Full width for all months
-              display: "grid",
-              gridTemplateColumns: `${metaColWidth} repeat(${totalMonths}, minmax(${monthMinWidth}px, 1fr))`,
-              scrollSnapAlign: "start",
-            }}
-          >
-            <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-blue-800 sm:px-4 sm:text-xs">
-              {visibleYear}
-            </div>
-            {years.map((y, yearIndex) => (
-              <div
-                key={y}
-                className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-700 sm:px-3 sm:text-xs ${
-                  yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
-                } ${yearIndex === 0 ? "" : "border-l-4 border-l-zinc-200"}`}
-                style={{ gridColumn: `span ${months.length}` }}
+          {/* Language switcher above the matrix */}
+          <div className="flex justify-end px-4 py-2 border-b border-black bg-zinc-50">
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+                className="flex items-center gap-2 h-8 rounded-md bg-white border border-zinc-300 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
               >
-                {y}
-              </div>
-            ))}
-
-            <div className="sticky left-0 z-20 border-b border-black bg-zinc-200 px-3 py-3 text-[11px] font-semibold text-zinc-700 sm:px-4 sm:text-xs backdrop-blur-none">
-              {getLocalizedText("renterRoom", language)}
-            </div>
-            {years.flatMap((y, yearIndex) =>
-              months.map((m, monthIndex) => {
-                const flatIndex = yearIndex * months.length + monthIndex;
-                return (
-                  <div
-                    key={`${y}-${m}`}
-                    className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs truncate ${
-                      yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
-                    } ${
-                      flatIndex === currentMonthFlatIndex
-                        ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
-                        : monthIndex % 3 === 0
-                          ? "border-l-2 border-l-zinc-300"
-                          : ""
-                    }`}
-                  >
-                    {m}
-                  </div>
-                );
-              }),
-            )}
-
-            {rooms.map((room) => {
-              const renter = findRenterByRoomLocal(room.id);
-              return (
-                <div key={room.id} style={{ display: "contents" }}>
-                  <div
-                    key={`${room.id}-meta`}
-                    className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none cursor-pointer hover:bg-zinc-300 transition-colors"
-                    onClick={() => handleRoomClick(room)}
-                  >
-                    {/* Grid Layout: 2 columns, 2 rows */}
-                    <div className="grid grid-cols-[auto_1fr] grid-rows-2 gap-x-2 gap-y-1">
-                      {/* Avatar - Top Left */}
-                      {renter && (
-                        <div className="row-span-2 flex items-start justify-center">
-                          <div className="relative flex-shrink-0">
-                            <img
-                              src={
-                                renterPhotoUrl[renter.id] ??
-                                getAvatarUrl(renter.nationalId)
-                              }
-                              alt={
-                                getLocalizedRenterName(renter.id, language) ||
-                                renter.fullName
-                              }
-                              className="w-6 h-6 rounded-full object-cover border border-zinc-300"
-                            />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Renter Name - Top Right */}
-                      <div className="flex items-center">
-                        {renter && (
-                          <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
-                            {getLocalizedRenterName(renter.id, language) ||
-                              renter.fullName}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Room Name - Bottom Left (if no renter) or Empty */}
-                      {!renter && (
-                        <div className="flex items-center">
-                          <div className="text-sm font-semibold text-zinc-900">
-                            {getLocalizedRoomName(room.id, language)}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Move-in Date - Bottom Right (spans full width if no avatar) */}
-                      <div
-                        className={`flex items-end ${!renter ? "col-span-2" : ""} mb-2`}
-                      >
-                        <div className="truncate text-xs font-bold text-zinc-700">
-                          {renter ? (
-                            renter.moveIn ? (
-                              formatEthiopianDate(renter.moveIn, language)
-                            ) : (
-                              ""
-                            )
-                          ) : (
-                            <div className="text-sm font-semibold text-zinc-900">
-                              {getLocalizedRoomName(room.id, language)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {years.flatMap((y, yearIndex) =>
-                    months.map((_, monthIndex) => {
-                      const flatIndex = yearIndex * months.length + monthIndex;
-                      const snap = getSnapshotLocal(
-                        room.id,
-                        y,
-                        monthIndex as EthiopianMonthIndex,
-                      );
-
-                      // Check if this cell is manually marked as paid
-                      const cellKey = `${room.id}-${y}-${monthIndex}`;
-                      const isManuallyPaid = paidStatuses.has(cellKey);
-
-                      // Determine status: manual paid takes priority, then original status
-                      let status: RentCellStatus;
-                      if (isManuallyPaid) {
-                        status = "paid";
-                      } else if (
-                        snap?.status === "paid" &&
-                        !paidStatuses.has(
-                          `${room.id}-${y}-${monthIndex}-unpaid`,
-                        )
-                      ) {
-                        status = "paid";
-                      } else {
-                        status = snap?.status ?? "na";
-                      }
-
-                      // Check if this month is clickable (past or current) and not vacant
-                      const isClickable = snap?.status !== "vacant";
-
-                      return (
-                        <div
-                          key={`${room.id}-${y}-${monthIndex}`}
-                          className={`border-b border-black px-2 py-2 ${
-                            flatIndex === currentMonthFlatIndex
-                              ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
-                              : monthIndex % 3 === 0
-                                ? "border-l-2 border-l-zinc-300"
-                                : ""
-                          }`}
-                        >
-                          <div
-                            className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
-                              isClickable
-                                ? "cursor-pointer hover:border-blue-400"
-                                : "cursor-default"
-                            } ${cellClass(status)}`}
-                            title={snap?.note ?? ""}
-                            onClick={() =>
-                              isClickable &&
-                              handleCellClick(room.id, y, monthIndex)
-                            }
-                          >
-                            {status === "paid" && (
-                              <div className="absolute inset-0 flex items-center justify-center opacity-20">
-                                <svg
-                                  className="h-8 w-8 text-emerald-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
-                              </div>
-                            )}
-                            {renter?.moveIn && (
-                              <span className="absolute top-0 right-0 text-[9px] text-zinc-600 px-1 z-10">
-                                {renter.moveIn.day}
-                              </span>
-                            )}
-                            {status !== "paid" &&
-                              cellLabel(status, snap?.paidDate, language) !==
-                                "" && (
-                                <span className="text-center">
-                                  {cellLabel(status, snap?.paidDate, language)}
-                                </span>
-                              )}
-                          </div>
-                        </div>
-                      );
-                    }),
-                  )}
-                </div>
-              );
-            })}
-
-            <div style={{ display: "contents" }}>
-              <div className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none">
-                <button
-                  type="button"
-                  onClick={() => setAddRenterOpen(true)}
-                  className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                <span>🌐</span>
+                <span>{LANGUAGE_INFO[language].flag}</span>
+                <span className="hidden sm:inline">
+                  {LANGUAGE_INFO[language].name}
+                </span>
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <span className="text-sm">+</span>
-                  <span>{language === "en" ? "Add renter" : "ተከራይ ጨምር"}</span>
-                </button>
-              </div>
-              {years.flatMap((y) =>
-                months.map((_, monthIndex) => (
-                  <div
-                    key={`add-row-${y}-${monthIndex}`}
-                    className={`border-b border-black px-2 py-2 ${
-                      monthIndex % 3 === 0 ? "border-l-2 border-l-zinc-300" : ""
-                    }`}
-                  >
-                    <div className="h-16 rounded-lg border border-zinc-200 bg-white" />
-                  </div>
-                )),
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+
+              {showLanguageDropdown && (
+                <div className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-md shadow-lg z-50">
+                  {Object.entries(LANGUAGE_INFO).map(([langCode, info]) => (
+                    <button
+                      key={langCode}
+                      onClick={() => {
+                        setLanguage(langCode as Language);
+                        setShowLanguageDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-zinc-50 ${
+                        language === langCode
+                          ? "bg-zinc-100 text-zinc-900"
+                          : "text-zinc-700"
+                      }`}
+                    >
+                      <span>{info.flag}</span>
+                      <span>{info.name}</span>
+                      {language === langCode && (
+                        <svg
+                          className="w-3 h-3 ml-auto"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
+          {/* Current day header */}
+          <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
+            <div className="text-sm font-semibold text-zinc-900 truncate">
+              {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
+              {currentEthiopianDate.day}, {currentEthiopianDate.year}
+            </div>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2 border-b border-black">
+            <button
+              onClick={handlePrev}
+              disabled={currentPage === 0}
+              className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {getLocalizedText("previous3", language)}
+            </button>
+            <button
+              onClick={handleToday}
+              className="h-8 rounded-md bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
+            >
+              {getLocalizedText("moveToToday", language)}
+            </button>
+            <button
+              onClick={handleNext}
+              disabled={currentPage === totalPages - 1}
+              className="h-8 rounded-md bg-zinc-100 px-3 text-xs font-medium text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {getLocalizedText("next3", language)}
+            </button>
+          </div>
+          <div
+            className="overflow-x-auto scroll-smooth snap-x snap-mandatory relative"
+            ref={scrollContainerRef}
+            style={{ scrollPaddingLeft: "0px" }}
+          >
+            <div
+              style={{
+                minWidth: totalMonths * monthMinWidth + 200, // Full width for all months
+                display: "grid",
+                gridTemplateColumns: `${metaColWidth} repeat(${totalMonths}, minmax(${monthMinWidth}px, 1fr))`,
+                scrollSnapAlign: "start",
+              }}
+            >
+              <div className="sticky left-0 z-30 border-b border-black bg-white px-3 py-3 text-[11px] font-semibold text-blue-800 sm:px-4 sm:text-xs">
+                {visibleYear}
+              </div>
+              {years.map((y, yearIndex) => (
+                <div
+                  key={y}
+                  className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-700 sm:px-3 sm:text-xs ${
+                    yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
+                  } ${yearIndex === 0 ? "" : "border-l-4 border-l-zinc-200"}`}
+                  style={{ gridColumn: `span ${months.length}` }}
+                >
+                  {y}
+                </div>
+              ))}
+
+              <div className="sticky left-0 z-20 border-b border-black bg-zinc-200 px-3 py-3 text-[11px] font-semibold text-zinc-700 sm:px-4 sm:text-xs backdrop-blur-none">
+                {getLocalizedText("renterRoom", language)}
+              </div>
+              {years.flatMap((y, yearIndex) =>
+                months.map((m, monthIndex) => {
+                  const flatIndex = yearIndex * months.length + monthIndex;
+                  return (
+                    <div
+                      key={`${y}-${m}`}
+                      className={`border-b border-black px-2 py-3 text-center text-[11px] font-semibold text-zinc-500 sm:px-3 sm:text-xs truncate ${
+                        yearIndex % 2 === 0 ? "bg-white" : "bg-zinc-50"
+                      } ${
+                        flatIndex === currentMonthFlatIndex
+                          ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
+                          : monthIndex % 3 === 0
+                            ? "border-l-2 border-l-zinc-300"
+                            : ""
+                      }`}
+                    >
+                      {m}
+                    </div>
+                  );
+                }),
+              )}
+
+              {rooms.map((room) => {
+                const renter = findRenterByRoomLocal(room.id);
+                return (
+                  <div key={room.id} style={{ display: "contents" }}>
+                    <div
+                      key={`${room.id}-meta`}
+                      className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none cursor-pointer hover:bg-zinc-300 transition-colors"
+                      onClick={() => handleRoomClick(room)}
+                    >
+                      {/* Grid Layout: 2 columns, 2 rows */}
+                      <div className="grid grid-cols-[auto_1fr] grid-rows-2 gap-x-2 gap-y-1">
+                        {/* Avatar - Top Left */}
+                        {renter && (
+                          <div className="row-span-2 flex items-start justify-center">
+                            <div className="relative flex-shrink-0">
+                              <img
+                                src={
+                                  renterPhotoUrl[renter.id] ??
+                                  getAvatarUrl(renter.nationalId)
+                                }
+                                alt={
+                                  getLocalizedRenterName(renter.id, language) ||
+                                  renter.fullName
+                                }
+                                className="w-6 h-6 rounded-full object-cover border border-zinc-300"
+                              />
+                              <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Renter Name - Top Right */}
+                        <div className="flex items-center">
+                          {renter && (
+                            <div className="text-[11px] font-medium text-zinc-900 sm:text-xs">
+                              {getLocalizedRenterName(renter.id, language) ||
+                                renter.fullName}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Room Name - Bottom Left (if no renter) or Empty */}
+                        {!renter && (
+                          <div className="flex items-center">
+                            <div className="text-sm font-semibold text-zinc-900">
+                              {room.name}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Move-in Date - Bottom Right (spans full width if no avatar) */}
+                        <div
+                          className={`flex items-end ${!renter ? "col-span-2" : ""} mb-2`}
+                        >
+                          <div className="truncate text-xs font-bold text-zinc-700">
+                            {renter ? (
+                              renter.moveIn ? (
+                                formatEthiopianDate(renter.moveIn, language)
+                              ) : (
+                                ""
+                              )
+                            ) : (
+                              <div className="text-sm font-semibold text-zinc-900">
+                                {room.name}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {years.flatMap((y, yearIndex) =>
+                      months.map((_, monthIndex) => {
+                        const flatIndex =
+                          yearIndex * months.length + monthIndex;
+                        const snap = getSnapshotLocal(
+                          room.id,
+                          y,
+                          monthIndex as EthiopianMonthIndex,
+                        );
+
+                        // Check if this cell is manually marked as paid
+                        const cellKey = `${room.id}-${y}-${monthIndex}`;
+                        const isManuallyPaid = paidStatuses.has(cellKey);
+
+                        // Determine status: manual paid takes priority, then original status
+                        let status: RentCellStatus;
+                        if (isManuallyPaid) {
+                          status = "paid";
+                        } else if (
+                          snap?.status === "paid" &&
+                          !paidStatuses.has(
+                            `${room.id}-${y}-${monthIndex}-unpaid`,
+                          )
+                        ) {
+                          status = "paid";
+                        } else {
+                          status = snap?.status ?? "na";
+                        }
+
+                        // Check if this month is clickable (past or current) and not vacant
+                        const isClickable = snap?.status !== "vacant";
+
+                        return (
+                          <div
+                            key={`${room.id}-${y}-${monthIndex}`}
+                            className={`border-b border-black px-2 py-2 ${
+                              flatIndex === currentMonthFlatIndex
+                                ? "border-l-4 border-l-red-500 border-r-4 border-r-red-500"
+                                : monthIndex % 3 === 0
+                                  ? "border-l-2 border-l-zinc-300"
+                                  : ""
+                            }`}
+                          >
+                            <div
+                              className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
+                                isClickable
+                                  ? "cursor-pointer hover:border-blue-400"
+                                  : "cursor-default"
+                              } ${cellClass(status)}`}
+                              title={snap?.note ?? ""}
+                              onClick={() =>
+                                isClickable &&
+                                handleCellClick(room.id, y, monthIndex)
+                              }
+                            >
+                              {status === "paid" && (
+                                <div className="absolute inset-0 flex items-center justify-center opacity-20">
+                                  <svg
+                                    className="h-8 w-8 text-emerald-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                </div>
+                              )}
+                              {renter?.moveIn && (
+                                <span className="absolute top-0 right-0 text-[9px] text-zinc-600 px-1 z-10">
+                                  {renter.moveIn.day}
+                                </span>
+                              )}
+                              {status !== "paid" &&
+                                cellLabel(status, snap?.paidDate, language) !==
+                                  "" && (
+                                  <span className="text-center">
+                                    {cellLabel(
+                                      status,
+                                      snap?.paidDate,
+                                      language,
+                                    )}
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                        );
+                      }),
+                    )}
+                  </div>
+                );
+              })}
+
+              <div style={{ display: "contents" }}>
+                <div className="sticky left-0 z-30 border-b border-black bg-zinc-200 px-3 py-3 sm:px-4 sm:py-4 backdrop-blur-none">
+                  <button
+                    type="button"
+                    onClick={() => setAddRenterOpen(true)}
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    <span className="text-sm">+</span>
+                    <span>{language === "en" ? "Add renter" : "ተከራይ ጨምር"}</span>
+                  </button>
+                </div>
+                {years.flatMap((y) =>
+                  months.map((_, monthIndex) => (
+                    <div
+                      key={`add-row-${y}-${monthIndex}`}
+                      className={`border-b border-black px-2 py-2 ${
+                        monthIndex % 3 === 0
+                          ? "border-l-2 border-l-zinc-300"
+                          : ""
+                      }`}
+                    >
+                      <div className="h-16 rounded-lg border border-zinc-200 bg-white" />
+                    </div>
+                  )),
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Renter Modal */}
       {selectedRenter && (
         <RenterModal
           renter={selectedRenter.renter}
-          roomName={getLocalizedRoomName(selectedRenter.roomId, language)}
+          roomName={
+            rooms.find((r) => r.id === selectedRenter.roomId)?.name || ""
+          }
           roomId={selectedRenter.roomId}
           language={language}
           onClose={() => setSelectedRenter(null)}
