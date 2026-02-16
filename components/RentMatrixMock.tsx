@@ -1001,8 +1001,8 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       )}
 
       {addRenterOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="modal-container mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-zinc-900">
                 {language === "en" ? "Add renter" : "ተከራይ ጨምር"}
@@ -1027,7 +1027,12 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                 <input
                   value={newRenterFullName}
                   onChange={(e) => setNewRenterFullName(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={
+                    language === "en" ? "Enter full name" : "ሙሉ ስም ያስገቡ"
+                  }
+                  autoComplete="name"
+                  autoFocus
                 />
               </div>
 
@@ -1038,7 +1043,12 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                 <input
                   value={newRenterPhone}
                   onChange={(e) => setNewRenterPhone(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={
+                    language === "en" ? "Enter phone number" : "ስልክ ቁጥር ያስገቡ"
+                  }
+                  autoComplete="tel"
+                  type="tel"
                 />
               </div>
 
@@ -1049,7 +1059,11 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                 <input
                   value={newRenterNationalId}
                   onChange={(e) => setNewRenterNationalId(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={
+                    language === "en" ? "Enter national ID" : "መታወቂያ ያስገቡ"
+                  }
+                  autoComplete="off"
                 />
               </div>
 

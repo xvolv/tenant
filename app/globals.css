@@ -1,1 +1,46 @@
 @import "tailwindcss";
+
+/* Mobile keyboard fix */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari */
+  html {
+    height: 100vh;
+    position: fixed;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    height: 100vh;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Virtual keyboard handling */
+@media (max-height: 600px) {
+  .modal-content {
+    padding-bottom: 200px;
+    transition: padding-bottom 0.3s ease;
+  }
+}
+
+/* Input field focus adjustments */
+input:focus,
+textarea:focus,
+select:focus {
+  scroll-margin: 100px;
+}
+
+/* Modal positioning for mobile */
+@media (max-width: 768px) {
+  .fixed.inset-0 {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal-container {
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

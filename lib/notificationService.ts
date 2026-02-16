@@ -59,8 +59,7 @@ const messageTemplates = {
       `🏠 *RENT DUE REMINDER*\n\n` +
       `📅 *Due: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year} (${days} days)*\n` +
       `🏢 *Room: ${roomName}*\n` +
-      `👤 *Tenant: ${tenantName}*\n` +
-      `💰 *Amount: ${amount} ETB*\n\n` +
+      `👤 *Tenant: ${tenantName}*\n\n` +
       `🔔 *Status: PENDING*\n\n` +
       `Please remind the tenant to pay on time.`,
 
@@ -75,8 +74,7 @@ const messageTemplates = {
       `🏠 *RENT DUE TODAY*\n\n` +
       `📅 *Due: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n` +
       `🏢 *Room: ${roomName}*\n` +
-      `👤 *Tenant: ${tenantName}*\n` +
-      `💰 *Amount: ${amount} ETB*\n\n` +
+      `👤 *Tenant: ${tenantName}*\n\n` +
       `🔔 *Status: DUE TODAY*\n\n` +
       `Payment is due today. Please remind the tenant.`,
 
@@ -91,8 +89,7 @@ const messageTemplates = {
       `✅ *PAYMENT RECEIVED*\n\n` +
       `📅 *Paid: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n` +
       `🏢 *Room: ${roomName}*\n` +
-      `👤 *Tenant: ${tenantName}*\n` +
-      `💰 *Amount: ${amount} ETB*\n\n` +
+      `👤 *Tenant: ${tenantName}*\n\n` +
       `🔔 *Status: PAID*\n\n` +
       `Thank you! Payment recorded successfully.`,
   },
@@ -109,8 +106,7 @@ const messageTemplates = {
       `🏠 *የቤት ክፍያ ማስታወቂያ*\n\n` +
       `📅 *የሚከፈልበት: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year} (${days} ቀናት)*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
-      `👤 *ተከራይ: ${tenantName}*\n` +
-      `💰 *መጠን: ${amount} ብር*\n\n` +
+      `👤 *ተከራይ: ${tenantName}*\n\n` +
       `🔔 *ሁኔታ: ገና አልተከፈለም*\n\n` +
       `እባክዎ ተከራዩን በጊዜ መክፈል እንዲሞክሩ ያስተምሩ።`,
 
@@ -125,8 +121,7 @@ const messageTemplates = {
       `🏠 *የቤት ክፍያ ዛሬ ይከፈላል*\n\n` +
       `📅 *የሚከፈልበት: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
-      `👤 *ተከራይ: ${tenantName}*\n` +
-      `💰 *መጠን: ${amount} ብር*\n\n` +
+      `👤 *ተከራይ: ${tenantName}*\n\n` +
       `🔔 *ሁኔታ: ዛሬ ይከፈላል*\n\n` +
       `ክፍያ ዛሬ ይከፈላል። እባክዎ ተከራዩን ያስተምሩ።`,
 
@@ -141,8 +136,7 @@ const messageTemplates = {
       `✅ *ክፍያ ተቀበለ*\n\n` +
       `📅 *ተከፈለ: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
-      `👤 *ተከራይ: ${tenantName}*\n` +
-      `💰 *መጠን: ${amount} ብር*\n\n` +
+      `👤 *ተከራይ: ${tenantName}*\n\n` +
       `🔔 *ሁኔታ: ተከፈለ*\n\n` +
       `እናመሰግናለን! ክፍያዉ በተሳካ ሁኔታ ተመዝግቧል።`,
   },
