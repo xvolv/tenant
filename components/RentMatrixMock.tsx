@@ -799,10 +799,28 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                             monthIndex;
                           const isPastMonth =
                             cellFlatIndex < currentMonthFlatIndex;
+                          const isCurrentMonth =
+                            cellFlatIndex === currentMonthFlatIndex;
                           const renter = findRenterByRoomLocal(room.id);
 
-                          if (isPastMonth && renter) {
-                            // This is a past month that should have been paid but wasn't
+                          // Get current Ethiopian day for comparison
+                          const now = new Date();
+                          const ethiopianToday = toEthiopian(
+                            now.getFullYear(),
+                            now.getMonth() + 1,
+                            now.getDate(),
+                          );
+                          const currentDay = ethiopianToday.day;
+
+                          // Get due day for this renter
+                          const dueDay = renter?.moveIn?.day || 1;
+
+                          const isOverdue =
+                            isPastMonth ||
+                            (isCurrentMonth && currentDay > dueDay);
+
+                          if (isOverdue && renter) {
+                            // This is a past month or current month after due date
                             status = "overdue";
                           } else {
                             status = snap?.status ?? "na";
