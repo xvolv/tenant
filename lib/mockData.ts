@@ -9,7 +9,7 @@ import { toGregorian } from "ethiopian-calendar-new";
 
 export type EthiopianMonthIndex = number; // 0..11
 
-export type RentCellStatus = "paid" | "unpaid" | "vacant" | "na";
+export type RentCellStatus = "paid" | "unpaid" | "overdue" | "vacant" | "na";
 
 export type Room = {
   id: string;

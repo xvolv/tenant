@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/notifications", 
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 21 * * *"
+    }
+  ]
+}

@@ -28,6 +28,31 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Auto-start notification scheduler when dashboard loads
+  useEffect(() => {
+    const startScheduler = async () => {
+      try {
+        console.log("🚀 Auto-starting notification scheduler...");
+        const response = await fetch("/api/scheduler", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "start" }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log("✅", result.message);
+        } else {
+          console.error("❌ Failed to start scheduler");
+        }
+      } catch (error) {
+        console.error("❌ Error starting scheduler:", error);
+      }
+    };
+
+    startScheduler();
+  }, []);
+
   // Calculate Ethiopian current year + 2
   const now = new Date();
   const ethiopianCurrentYear = toEthiopian(

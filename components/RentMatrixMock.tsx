@@ -40,10 +40,12 @@ function cellClass(status: RentCellStatus) {
   switch (status) {
     case "paid":
       return "bg-emerald-50 text-emerald-800 border-emerald-100 relative overflow-hidden";
+    case "overdue":
+      return "bg-yellow-50 text-yellow-800 border-yellow-200 relative overflow-hidden cursor-pointer hover:border-yellow-400";
     case "vacant":
       return "bg-zinc-100 text-zinc-500 border-zinc-200";
     default:
-      return "bg-white text-zinc-400 border-zinc-200";
+      return "bg-white text-zinc-400 border-zinc-200 cursor-pointer hover:border-blue-400";
   }
 }
 
@@ -55,6 +57,8 @@ function cellLabel(
   switch (status) {
     case "paid":
       return `${paidDate ?? ""}✅`;
+    case "overdue":
+      return "⏰";
     case "vacant":
       return getLocalizedText("vacant", language);
     default:
@@ -784,11 +788,31 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                           )
                         ) {
                           status = "paid";
+                        } else if (
+                          snap?.status === "unpaid" ||
+                          snap?.status === "na"
+                        ) {
+                          // Check if this is an overdue payment
+                          const cellFlatIndex =
+                            displayYears.findIndex((year) => year === y) *
+                              months.length +
+                            monthIndex;
+                          const isPastMonth =
+                            cellFlatIndex < currentMonthFlatIndex;
+                          const renter = findRenterByRoomLocal(room.id);
+
+                          if (isPastMonth && renter) {
+                            // This is a past month that should have been paid but wasn't
+                            status = "overdue";
+                          } else {
+                            status = snap?.status ?? "na";
+                          }
                         } else {
                           status = snap?.status ?? "na";
                         }
 
                         // Check if this month is clickable (past or current) and not vacant
+                        // Overdue cells should also be clickable so they can be marked as paid
                         const isClickable = snap?.status !== "vacant";
 
                         return (
@@ -804,9 +828,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                           >
                             <div
                               className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
-                                isClickable
-                                  ? "cursor-pointer hover:border-blue-400"
-                                  : "cursor-default"
+                                isClickable ? "" : "cursor-default"
                               } ${cellClass(status)}`}
                               title={snap?.note ?? ""}
                               onClick={() =>

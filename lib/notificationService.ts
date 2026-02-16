@@ -1,6 +1,14 @@
-import { toEthiopian } from "ethiopian-calendar-new";
+import { toEthiopian, toGregorian } from "ethiopian-calendar-new";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+
+// Type definition for Ethiopian date
+interface EthiopianDate {
+  year: number;
+  month: number;
+  day: number;
+  monthIndex?: number;
+}
 
 // Ethiopian months in English and Amharic
 const ETHIOPIAN_MONTHS = {
@@ -12,17 +20,18 @@ const ETHIOPIAN_MONTHS = {
     "Tir",
     "Yekatit",
     "Megabit",
-    "Miyazia",
-    "Ginbo",
+    "Miazia",
+    "Ginbot",
     "Sene",
     "Hamle",
     "Nehase",
+    "Pagume",
   ],
   am: [
     "መስከረም",
     "ጥቅምት",
     "ህዳር",
-    "ታኅሣሥ",
+    "ታህሣሥ",
     "ጥር",
     "የካቲት",
     "መጋቢት",
@@ -31,6 +40,7 @@ const ETHIOPIAN_MONTHS = {
     "ሰኔ",
     "ሐምሌ",
     "ነሐሴ",
+    "ጳጉሜን",
   ],
 };
 
@@ -43,7 +53,9 @@ const messageTemplates = {
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
+      `📅 *Today: ${ETHIOPIAN_MONTHS.en[todayDate.month - 1]} ${todayDate.day}, ${todayDate.year}*\n\n` +
       `🏠 *RENT DUE REMINDER*\n\n` +
       `📅 *Due: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year} (${days} days)*\n` +
       `🏢 *Room: ${roomName}*\n` +
@@ -52,28 +64,30 @@ const messageTemplates = {
       `🔔 *Status: PENDING*\n\n` +
       `Please remind the tenant to pay on time.`,
 
-    overdue: (
-      daysOverdue: number,
+    dueToday: (
       roomName: string,
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
-      `⚠️ *OVERDUE RENT PAYMENT*\n\n` +
-      `📅 *Was Due: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n` +
-      `🔴 *Overdue by: ${daysOverdue} days*\n` +
+      `📅 *Today: ${ETHIOPIAN_MONTHS.en[todayDate.month - 1]} ${todayDate.day}, ${todayDate.year}*\n\n` +
+      `🏠 *RENT DUE TODAY*\n\n` +
+      `📅 *Due: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n` +
       `🏢 *Room: ${roomName}*\n` +
       `👤 *Tenant: ${tenantName}*\n` +
       `💰 *Amount: ${amount} ETB*\n\n` +
-      `🔔 *Status: OVERDUE*\n\n` +
-      `Immediate action required! Please contact the tenant.`,
+      `🔔 *Status: DUE TODAY*\n\n` +
+      `Payment is due today. Please remind the tenant.`,
 
     paid: (
       roomName: string,
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
+      `📅 *Today: ${ETHIOPIAN_MONTHS.en[todayDate.month - 1]} ${todayDate.day}, ${todayDate.year}*\n\n` +
       `✅ *PAYMENT RECEIVED*\n\n` +
       `📅 *Paid: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n` +
       `🏢 *Room: ${roomName}*\n` +
@@ -89,7 +103,9 @@ const messageTemplates = {
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
+      `📅 *ዛሬ: ${ETHIOPIAN_MONTHS.am[todayDate.month - 1]} ${todayDate.day} ቀን ${todayDate.year}*\n\n` +
       `🏠 *የቤት ክፍያ ማስታወቂያ*\n\n` +
       `📅 *የሚከፈልበት: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year} (${days} ቀናት)*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
@@ -98,28 +114,30 @@ const messageTemplates = {
       `🔔 *ሁኔታ: ገና አልተከፈለም*\n\n` +
       `እባክዎ ተከራዩን በጊዜ መክፈል እንዲሞክሩ ያስተምሩ።`,
 
-    overdue: (
-      daysOverdue: number,
+    dueToday: (
       roomName: string,
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
-      `⚠️ *የተዘገበ የቤት ክፍያ*\n\n` +
-      `📅 *መከፈል ነበረበት: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n` +
-      `🔴 *በጊዜ ያለፈ: ${daysOverdue} ቀናት*\n` +
+      `📅 *ዛሬ: ${ETHIOPIAN_MONTHS.am[todayDate.month - 1]} ${todayDate.day} ቀን ${todayDate.year}*\n\n` +
+      `🏠 *የቤት ክፍያ ዛሬ ይከፈላል*\n\n` +
+      `📅 *የሚከፈልበት: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
       `👤 *ተከራይ: ${tenantName}*\n` +
       `💰 *መጠን: ${amount} ብር*\n\n` +
-      `🔔 *ሁኔታ: ተዘግቷል*\n\n` +
-      `ወሲን ድርጊት ያስፈልጋል! እባክዎ ተከራዩን ይውሰዱ።`,
+      `🔔 *ሁኔታ: ዛሬ ይከፈላል*\n\n` +
+      `ክፍያ ዛሬ ይከፈላል። እባክዎ ተከራዩን ያስተምሩ።`,
 
     paid: (
       roomName: string,
       tenantName: string,
       amount: number,
       ethiopianDate: any,
+      todayDate: any,
     ) =>
+      `📅 *ዛሬ: ${ETHIOPIAN_MONTHS.am[todayDate.month - 1]} ${todayDate.day} ቀን ${todayDate.year}*\n\n` +
       `✅ *ክፍያ ተቀበለ*\n\n` +
       `📅 *ተከፈለ: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n` +
       `🏢 *ክፍል: ${roomName}*\n` +
@@ -136,14 +154,19 @@ export async function checkRentNotifications() {
     failed: 0,
     details: [] as any[],
   };
+  let notificationsSent = 0;
 
   try {
-    // Get current Ethiopian date
+    // Get current Ethiopian date directly
     const now = new Date();
-    const ethiopianDate = toEthiopian(
+    const ethiopianToday = toEthiopian(
       now.getFullYear(),
       now.getMonth() + 1,
       now.getDate(),
+    );
+
+    console.log(
+      `📅 Today is: ${ETHIOPIAN_MONTHS.en[ethiopianToday.month - 1]} ${ethiopianToday.day}, ${ethiopianToday.year}`,
     );
 
     // Get rooms from your API
@@ -157,6 +180,7 @@ export async function checkRentNotifications() {
 
     console.log(`📊 Found ${rooms.length} rooms to check`);
 
+    // Check each room for rent due notifications
     for (const room of rooms) {
       console.log(
         `🏠 Checking room: ${room.name}, renters: ${room.renters.length}`,
@@ -172,37 +196,68 @@ export async function checkRentNotifications() {
         `   👤 Tenant: ${renter.fullName}, payments: ${room.rentPayments.length}`,
       );
 
-      // Check each month for the next 30 days
-      for (let daysAhead = 0; daysAhead <= 30; daysAhead++) {
-        const checkDate = new Date(now);
-        checkDate.setDate(checkDate.getDate() + daysAhead);
+      // Transform database moveIn fields to EthiopianDate object
+      const moveInDate: EthiopianDate = {
+        year: renter.moveInYear,
+        month: renter.moveInMonth + 1, // Convert 0-indexed to 1-indexed
+        day: renter.moveInDay,
+        monthIndex: renter.moveInMonth,
+      };
 
-        const ethiopianCheckDate = toEthiopian(
-          checkDate.getFullYear(),
-          checkDate.getMonth() + 1,
-          checkDate.getDate(),
-        );
+      console.log(
+        `   📥 Move-in date: ${ETHIOPIAN_MONTHS.en[moveInDate.month - 1]} ${moveInDate.day}, ${moveInDate.year}`,
+      );
 
-        console.log(
-          `   📅 Checking ${daysAhead} days ahead: ${ethiopianCheckDate.year}-${ethiopianCheckDate.month}-${ethiopianCheckDate.day} (monthIndex: ${ethiopianCheckDate.month - 1})`,
-        );
+      // Calculate due date directly in Ethiopian calendar
+      // Rent is due on the same day each month as move-in day
+      const dueThisMonth: EthiopianDate = {
+        year: ethiopianToday.year,
+        month: ethiopianToday.month,
+        day: moveInDate.day,
+        monthIndex: ethiopianToday.month - 1,
+      };
 
-        // Check if there's a payment record for this month
-        const existingPayment = room.rentPayments.find(
-          (p: any) =>
-            p.year === ethiopianCheckDate.year &&
-            p.monthIndex === ethiopianCheckDate.month - 1,
-        );
+      console.log(
+        `   📅 Due this month: ${ETHIOPIAN_MONTHS.en[dueThisMonth.month - 1]} ${dueThisMonth.day}, ${dueThisMonth.year}`,
+      );
 
-        console.log(
-          `   💳 Payment found: ${!!existingPayment}, paid: ${existingPayment?.isPaid}`,
-        );
+      // Calculate days until due (working with Ethiopian dates)
+      let daysUntilDue = 0;
 
-        if (!existingPayment || !existingPayment.isPaid) {
-          console.log(`   🚨 Need to notify for this date!`);
-          // Get owner's Telegram user ID (using your token storage)
+      // If today is before due date in the same month
+      if (ethiopianToday.day < dueThisMonth.day) {
+        daysUntilDue = dueThisMonth.day - ethiopianToday.day;
+      }
+      // If today is the due date
+      else if (ethiopianToday.day === dueThisMonth.day) {
+        daysUntilDue = 0;
+      }
+      // If today is after due date, rent is overdue (but we don't send notifications)
+      else {
+        daysUntilDue = -1; // Overdue
+      }
+
+      console.log(`   ⏰ Days until due: ${daysUntilDue}`);
+
+      // Check if there's a payment record for this month
+      const existingPayment = room.rentPayments.find(
+        (p: any) =>
+          p.year === ethiopianToday.year &&
+          p.monthIndex === ethiopianToday.month - 1,
+      );
+
+      console.log(
+        `   💳 Payment found: ${!!existingPayment}, paid: ${existingPayment?.isPaid}`,
+      );
+
+      // Only send notifications if not already paid and within notification window
+      if (!existingPayment || !existingPayment.isPaid) {
+        // Check if we're in the notification window (3 days before due date, including due date)
+        if (daysUntilDue >= 0 && daysUntilDue <= 3) {
+          console.log(`   🚨 Within notification window!`);
+
+          // Get owner's Telegram user ID
           const telegramUserId = await getOwnerTelegramUserId(room.id);
-
           console.log(`   📱 Telegram user ID: ${telegramUserId}`);
 
           if (telegramUserId) {
@@ -213,67 +268,65 @@ export async function checkRentNotifications() {
             let message: string;
             let type: string;
 
-            if (daysAhead === 0 && !existingPayment) {
-              // Overdue - due today but not paid
-              const daysOverdue = calculateDaysOverdue(
-                renter.moveIn,
-                ethiopianCheckDate,
-              );
-              message = templates.overdue(
-                daysOverdue,
+            if (daysUntilDue === 0) {
+              // Due today
+              message = templates.dueToday(
                 room.name,
                 renter.fullName,
                 5000,
-                ethiopianCheckDate,
+                dueThisMonth,
+                ethiopianToday,
               );
-              type = "overdue";
-            } else if (
-              daysAhead <= 3 &&
-              (!existingPayment || !existingPayment.isPaid)
-            ) {
-              // Due soon (3 days or less) and unpaid
+              type = "due_today";
+            } else {
+              // Due in 1-3 days
               message = templates.dueSoon(
-                daysAhead,
+                daysUntilDue,
                 room.name,
                 renter.fullName,
                 5000,
-                ethiopianCheckDate,
+                dueThisMonth,
+                ethiopianToday,
               );
               type = "due_soon";
-            } else {
-              console.log(
-                `   ⏭️  Skipping - not within notification window (${daysAhead} days)`,
-              );
-              continue; // Skip if not within notification window
             }
 
-            console.log(`   📤 Sending notification: ${type}`);
-
-            // Send notification
-            const sent = await sendTelegramNotification(
-              telegramUserId,
-              message,
-            );
-
-            console.log(`   ✅ Send result: ${sent}`);
-
-            if (sent) {
-              results.sent++;
-              results.details.push({
-                room: room.name,
-                tenant: renter.fullName,
-                type,
-                message: message.substring(0, 50) + "...",
+            try {
+              const telegramApiUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+              const response = await fetch(telegramApiUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  chat_id: telegramUserId,
+                  text: message,
+                  parse_mode: "HTML",
+                }),
               });
-            } else {
-              results.failed++;
+
+              const sent = response.ok;
+              console.log(`   ✅ Send result: ${sent}`);
+
+              if (sent) {
+                notificationsSent++;
+              }
+            } catch (error) {
+              console.error(
+                `   ❌ Failed to send Telegram notification:`,
+                error,
+              );
             }
           } else {
             console.log(`   ❌ No Telegram user found for room ${room.id}`);
           }
         } else {
-          console.log(`   ✅ Payment already made or not needed`);
+          console.log(
+            `   ⏭️  Outside notification window (${daysUntilDue} days)`,
+          );
         }
+      } else {
+        console.log(`   ✅ Payment already recorded for this month`);
       }
     }
 
@@ -284,7 +337,88 @@ export async function checkRentNotifications() {
   }
 }
 
-// Helper functions using your token storage
+// Helper function to find the next rent due date
+function getNextRentDueDate(
+  moveIn: EthiopianDate,
+  currentDate: Date,
+): Date | null {
+  try {
+    // Validate input
+    if (!moveIn || !moveIn.year || !moveIn.month || !moveIn.day) {
+      console.error("Invalid moveIn date:", moveIn);
+      return null;
+    }
+
+    console.log("🔍 getNextRentDueDate called with:");
+    console.log("   Move-in:", moveIn);
+    console.log("   Current date:", currentDate);
+
+    // Convert move-in date to Gregorian for comparison using the library function
+    const moveInGregorian = toGregorian(moveIn.year, moveIn.month, moveIn.day);
+
+    // Validate conversion result
+    if (
+      !moveInGregorian ||
+      !moveInGregorian.year ||
+      !moveInGregorian.month ||
+      !moveInGregorian.day
+    ) {
+      console.error("Invalid Gregorian conversion result:", moveInGregorian);
+      return null;
+    }
+
+    console.log("   Converted to Gregorian:", moveInGregorian);
+
+    // Convert the result to a Date object for comparison
+    const moveInDate = new Date(
+      moveInGregorian.year,
+      moveInGregorian.month - 1,
+      moveInGregorian.day,
+    );
+
+    // Validate the created date
+    if (isNaN(moveInDate.getTime())) {
+      console.error("Invalid Date created:", moveInDate);
+      return null;
+    }
+
+    console.log("   Move-in Date object:", moveInDate);
+
+    // Start from the current month and find the next due date
+    let checkDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+    );
+    console.log("   Starting check from:", checkDate);
+
+    // Check up to 12 months ahead
+    for (let i = 0; i < 12; i++) {
+      const testDate = new Date(
+        checkDate.getFullYear(),
+        checkDate.getMonth() + i,
+        1,
+      );
+      console.log(
+        `   Checking month ${i}: ${testDate} (compare with move-in: ${moveInDate})`,
+      );
+
+      // If this date is on or after move-in date, it's a potential due date
+      if (testDate >= moveInDate) {
+        console.log("✅ Found next due date:", testDate);
+        return testDate;
+      }
+    }
+
+    console.log("❌ No due date found within 12 months");
+    return null;
+  } catch (error) {
+    console.error("Error in getNextRentDueDate:", error);
+    return null;
+  }
+}
+
+// Helper function to get owner's Telegram user ID from token storage
 async function getOwnerTelegramUserId(roomId: string): Promise<string | null> {
   // For now, return the first connected user (you can expand this later)
   // In a real system, you'd have a rooms->owners mapping
@@ -305,76 +439,29 @@ async function getOwnerTelegramUserId(roomId: string): Promise<string | null> {
   return null;
 }
 
-async function getUserLanguage(telegramUserId: string): Promise<string> {
-  // In a real system, you'd get this from the user's profile/dashboard preference
-  // For now, we'll check if there's a global language preference stored
-  // This should match the language selected in the dashboard (flag system)
-
-  // Try to get language from a global settings file (could be set by dashboard)
-  const GLOBAL_SETTINGS_FILE = join(process.cwd(), "global-settings.json");
-
-  if (existsSync(GLOBAL_SETTINGS_FILE)) {
-    const data = readFileSync(GLOBAL_SETTINGS_FILE, "utf-8");
-    const settings = JSON.parse(data);
-    if (
-      settings.language &&
-      (settings.language === "en" || settings.language === "am")
-    ) {
-      return settings.language;
+// Helper function to get user's language preference
+async function getUserLanguage(userId: string): Promise<string> {
+  try {
+    // Try to get language from global settings first
+    const SETTINGS_FILE = join(process.cwd(), "global-settings.json");
+    if (existsSync(SETTINGS_FILE)) {
+      const data = readFileSync(SETTINGS_FILE, "utf-8");
+      const settings = JSON.parse(data);
+      if (settings.language) {
+        return settings.language;
+      }
     }
-  }
 
-  // Fallback to Telegram-specific language file (for backward compatibility)
-  const LANG_FILE = join(process.cwd(), "telegram-languages.json");
-
-  if (existsSync(LANG_FILE)) {
-    const data = readFileSync(LANG_FILE, "utf-8");
-    const languages = new Map(JSON.parse(data));
-    const lang = languages.get(telegramUserId);
-    return typeof lang === "string" ? lang : "en";
+    // Fallback to telegram-languages.json
+    const LANG_FILE = join(process.cwd(), "telegram-languages.json");
+    if (existsSync(LANG_FILE)) {
+      const data = readFileSync(LANG_FILE, "utf-8");
+      const languages = JSON.parse(data);
+      return languages[userId] || "en";
+    }
+  } catch (error) {
+    console.error("Error getting user language:", error);
   }
 
   return "en"; // Default to English
-}
-
-async function sendTelegramNotification(
-  telegramUserId: string,
-  message: string,
-) {
-  try {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    if (!token) throw new Error("TELEGRAM_BOT_TOKEN not set");
-
-    const response = await fetch(
-      `https://api.telegram.org/bot${token}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: telegramUserId,
-          text: message,
-          parse_mode: "Markdown",
-          disable_web_page_preview: true,
-        }),
-      },
-    );
-
-    const data = await response.json();
-    return data.ok;
-  } catch (error) {
-    console.error("Failed to send Telegram notification:", error);
-    return false;
-  }
-}
-
-function calculateDaysOverdue(moveInDate: any, currentDate: any): number {
-  // Simple calculation - in production, use proper Ethiopian calendar math
-  const now = new Date();
-  return (
-    (Math.floor(
-      (now.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24),
-    ) %
-      30) +
-    1
-  );
 }
