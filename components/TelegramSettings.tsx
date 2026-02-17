@@ -11,10 +11,6 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-interface TelegramSettingsProps {
-  ownerId: string;
-}
-
 const translations = {
   en: {
     title: "Telegram Settings",
@@ -71,7 +67,7 @@ const translations = {
   },
 };
 
-export default function TelegramSettings({ ownerId }: TelegramSettingsProps) {
+export default function TelegramSettings() {
   const { language } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -124,7 +120,7 @@ export default function TelegramSettings({ ownerId }: TelegramSettingsProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ownerId }),
+        body: JSON.stringify({}),
       });
 
       const data = await response.json();
@@ -157,7 +153,7 @@ export default function TelegramSettings({ ownerId }: TelegramSettingsProps) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ownerId }),
+        body: JSON.stringify({}),
       });
 
       const data = await response.json();

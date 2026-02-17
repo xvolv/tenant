@@ -8,17 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  fullName  String
-  email     String   @unique
-  password  String   // hashed
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // This user owns rooms/renters (multi-tenancy)
-  rooms     Room[]
-  renters   Renter[]
-  sessions  Session[]
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  telegramChatId    String?   // Per-owner Telegram chat ID
+  rooms             Room[]
+  renters           Renter[]
+  sessions          Session[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@map("users")
 }

@@ -1,54 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFileSync, readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/session";
 import crypto from "crypto";
 
-// Simple file-based storage for development
-const TOKEN_FILE = join(process.cwd(), "telegram-tokens.json");
-
-// Load existing tokens
-function loadTokens(): Map<string, string> {
-  if (existsSync(TOKEN_FILE)) {
-    const data = readFileSync(TOKEN_FILE, "utf-8");
-    return new Map(JSON.parse(data));
-  }
-  return new Map();
-}
-
-// Save tokens
-function saveTokens(tokens: Map<string, string>) {
-  writeFileSync(TOKEN_FILE, JSON.stringify(Array.from(tokens.entries())));
-}
-
-// Generate token and save it immediately
-function generateAndSaveToken(): string {
-  const token = crypto.randomBytes(32).toString("hex");
-  const tokens = loadTokens();
-  tokens.set(token, "pending"); // Mark as pending until user connects
-  saveTokens(tokens);
-  return token;
-}
-
-// In production, you'd get the owner ID from authentication
-// For now, we'll use a simple approach
 export async function POST(request: NextRequest) {
   try {
-    const { ownerId } = await request.json();
-
-    if (!ownerId) {
-      return NextResponse.json(
-        { error: "Owner ID is required" },
-        { status: 400 },
-      );
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Generate unique token for this owner
-    const token = generateAndSaveToken();
+    // Generate a one-time token and store it on the user record
+    const token = crypto.randomBytes(32).toString("hex");
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { telegramChatId: `pending:${token}` }, // Temporarily store pending token
+    });
 
-    // In production, save this to your database:
-    // UPDATE owners SET telegram_token = '{token}' WHERE id = '{ownerId}'
-
-    // Create the deep link
     const botUsername = "saltenantbot"; // Your bot username
     const deepLink = `https://t.me/${botUsername}?start=${token}`;
 

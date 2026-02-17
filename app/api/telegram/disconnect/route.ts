@@ -1,54 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
-    const { ownerId } = await request.json()
-    
-    if (!ownerId) {
-      return NextResponse.json(
-        { error: 'Owner ID is required' },
-        { status: 400 }
-      )
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    
-    // Remove user from tokens
-    const TOKEN_FILE = join(process.cwd(), 'telegram-tokens.json')
-    if (existsSync(TOKEN_FILE)) {
-      const tokenData = readFileSync(TOKEN_FILE, 'utf-8')
-      const tokens = new Map(JSON.parse(tokenData))
-      
-      // Find and remove the user's token
-      for (const [token, userId] of tokens.entries()) {
-        if (userId === ownerId || (typeof userId === 'string' && tokens.get(token) === userId)) {
-          tokens.delete(token)
-          break
-        }
-      }
-      
-      writeFileSync(TOKEN_FILE, JSON.stringify(Array.from(tokens.entries())))
-    }
-    
-    // Optionally remove language preference too
-    const LANG_FILE = join(process.cwd(), 'telegram-languages.json')
-    if (existsSync(LANG_FILE)) {
-      const langData = readFileSync(LANG_FILE, 'utf-8')
-      const languages = new Map(JSON.parse(langData))
-      languages.delete(ownerId)
-      writeFileSync(LANG_FILE, JSON.stringify(Array.from(languages.entries())))
-    }
-    
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { telegramChatId: null },
+    });
+
     return NextResponse.json({
       success: true,
-      message: 'Disconnected from Telegram successfully'
-    })
-    
+      message: "Disconnected from Telegram successfully",
+    });
   } catch (error) {
-    console.error('Error disconnecting from Telegram:', error)
+    console.error("Error disconnecting from Telegram:", error);
     return NextResponse.json(
-      { error: 'Failed to disconnect' },
-      { status: 500 }
-    )
+      { error: "Failed to disconnect" },
+      { status: 500 },
+    );
   }
 }
