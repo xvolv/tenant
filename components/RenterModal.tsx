@@ -1,6 +1,7 @@
 "use client";
 
 import { Renter } from "@/lib/mockData";
+import { formatEthiopianDate } from "@/lib/mockData";
 import {
   getLocalizedRenterName,
   getLocalizedRoomName,
@@ -35,11 +36,9 @@ export default function RenterModal({
   const [editFullName, setEditFullName] = useState(renter.fullName);
   const [editPhone, setEditPhone] = useState(renter.phone);
   const [editNationalId, setEditNationalId] = useState(renter.nationalId);
-  const [editMoveInYear, setEditMoveInYear] = useState(renter.moveIn.year);
-  const [editMoveInMonth, setEditMoveInMonth] = useState(
-    renter.moveIn.monthIndex,
-  );
-  const [editMoveInDay, setEditMoveInDay] = useState(String(renter.moveIn.day));
+  const [editMoveInYear, setEditMoveInYear] = useState(renter.moveInYear);
+  const [editMoveInMonth, setEditMoveInMonth] = useState(renter.moveInMonth);
+  const [editMoveInDay, setEditMoveInDay] = useState(String(renter.moveInDay));
   const [editMonthPickerOpen, setEditMonthPickerOpen] = useState(false);
 
   const months = getLocalizedMonths(language);
@@ -81,11 +80,11 @@ export default function RenterModal({
           <div className="flex items-center space-x-4">
             <div className="relative">
               <img
-                src={avatarUrl}
+                src={renter.photoUrl || avatarUrl}
                 alt={
                   getLocalizedRenterName(renter.id, language) || renter.fullName
                 }
-                className="w-16 h-16 rounded-full object-cover border-2 border-zinc-200"
+                className="w-16 h-16 rounded-md object-cover border-2 border-zinc-200"
               />
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
@@ -147,8 +146,12 @@ export default function RenterModal({
             </label>
             {!editOpen ? (
               <div className="text-lg text-zinc-900">
-                {require("@/lib/mockData").formatEthiopianDate(
-                  renter.moveIn,
+                {formatEthiopianDate(
+                  {
+                    year: renter.moveInYear,
+                    monthIndex: renter.moveInMonth as any,
+                    day: renter.moveInDay,
+                  },
                   language,
                 )}
               </div>
@@ -210,19 +213,25 @@ export default function RenterModal({
           </div>
 
           {/* Move-out Date (if exists) */}
-          {renter.moveOut && (
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Move-out Date
-              </label>
-              <div className="text-lg text-zinc-900">
-                {require("@/lib/mockData").formatEthiopianDate(
-                  renter.moveOut,
-                  language,
-                )}
+          {renter.moveOutYear != null &&
+            renter.moveOutMonth != null &&
+            renter.moveOutDay != null && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Move-out Date
+                </label>
+                <div className="text-lg text-zinc-900">
+                  {formatEthiopianDate(
+                    {
+                      year: renter.moveOutYear,
+                      monthIndex: renter.moveOutMonth as any,
+                      day: renter.moveOutDay,
+                    },
+                    language,
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Room ID */}
           <div>
@@ -251,9 +260,9 @@ export default function RenterModal({
                   setEditFullName(renter.fullName);
                   setEditPhone(renter.phone);
                   setEditNationalId(renter.nationalId);
-                  setEditMoveInYear(renter.moveIn.year);
-                  setEditMoveInMonth(renter.moveIn.monthIndex);
-                  setEditMoveInDay(String(renter.moveIn.day));
+                  setEditMoveInYear(renter.moveInYear);
+                  setEditMoveInMonth(renter.moveInMonth);
+                  setEditMoveInDay(String(renter.moveInDay));
                 }}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
               >
@@ -269,9 +278,9 @@ export default function RenterModal({
                   setEditFullName(renter.fullName);
                   setEditPhone(renter.phone);
                   setEditNationalId(renter.nationalId);
-                  setEditMoveInYear(renter.moveIn.year);
-                  setEditMoveInMonth(renter.moveIn.monthIndex);
-                  setEditMoveInDay(String(renter.moveIn.day));
+                  setEditMoveInYear(renter.moveInYear);
+                  setEditMoveInMonth(renter.moveInMonth);
+                  setEditMoveInDay(String(renter.moveInDay));
                   setEditMonthPickerOpen(false);
                 }}
                 className="px-4 py-2 text-sm font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50"
@@ -298,11 +307,9 @@ export default function RenterModal({
                     fullName,
                     phone,
                     nationalId,
-                    moveIn: {
-                      year: Number(editMoveInYear),
-                      monthIndex: editMoveInMonth,
-                      day: moveInDay,
-                    },
+                    moveInYear: Number(editMoveInYear),
+                    moveInMonth: editMoveInMonth,
+                    moveInDay: moveInDay,
                   });
                   setEditOpen(false);
                   setEditMonthPickerOpen(false);

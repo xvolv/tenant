@@ -18,18 +18,12 @@ export const dbToRenter = (renter: any): Renter => ({
   phone: renter.phone,
   nationalId: renter.nationalId,
   roomId: renter.roomId,
-  moveIn: {
-    year: renter.moveInYear,
-    monthIndex: renter.moveInMonth,
-    day: renter.moveInDay,
-  },
-  moveOut: renter.moveOutYear
-    ? {
-        year: renter.moveOutYear,
-        monthIndex: renter.moveOutMonth!,
-        day: renter.moveOutDay!,
-      }
-    : undefined,
+  moveInYear: renter.moveInYear,
+  moveInMonth: renter.moveInMonth,
+  moveInDay: renter.moveInDay,
+  moveOutYear: renter.moveOutYear,
+  moveOutMonth: renter.moveOutMonth,
+  moveOutDay: renter.moveOutDay,
   photoUrl: renter.photoUrl,
 });
 
@@ -77,7 +71,9 @@ export async function createRenter(data: {
   phone: string;
   nationalId: string;
   roomId: string;
-  moveIn: EthiopianDate;
+  moveInYear: number;
+  moveInMonth: number;
+  moveInDay: number;
   photoUrl?: string;
 }): Promise<Renter> {
   const response = await fetch("/api/renters", {
@@ -90,15 +86,32 @@ export async function createRenter(data: {
       phone: data.phone,
       nationalId: data.nationalId,
       roomId: data.roomId,
-      moveInYear: data.moveIn.year,
-      moveInMonth: data.moveIn.monthIndex,
-      moveInDay: data.moveIn.day,
+      moveInYear: data.moveInYear,
+      moveInMonth: data.moveInMonth,
+      moveInDay: data.moveInDay,
       photoUrl: data.photoUrl,
     }),
   });
 
   if (!response.ok) {
-    throw new Error("Failed to create renter");
+    let message = "Failed to create renter";
+    try {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const body = await response.json();
+        if (body?.error && typeof body.error === "string") {
+          message = body.error;
+        } else {
+          message = `${message}: ${JSON.stringify(body)}`;
+        }
+      } else {
+        const text = await response.text();
+        if (text) message = `${message}: ${text}`;
+      }
+    } catch {
+      // ignore parsing errors
+    }
+    throw new Error(message);
   }
 
   const renter = await response.json();
@@ -111,7 +124,9 @@ export async function updateRenter(
     fullName?: string;
     phone?: string;
     nationalId?: string;
-    moveIn?: EthiopianDate;
+    moveInYear?: number;
+    moveInMonth?: number;
+    moveInDay?: number;
     photoUrl?: string;
   },
 ): Promise<Renter> {
@@ -120,12 +135,10 @@ export async function updateRenter(
       ...(data.fullName && { fullName: data.fullName }),
       ...(data.phone && { phone: data.phone }),
       ...(data.nationalId && { nationalId: data.nationalId }),
-      ...(data.moveIn && {
-        moveInYear: data.moveIn.year,
-        moveInMonth: data.moveIn.monthIndex,
-        moveInDay: data.moveIn.day,
-      }),
-      ...(data.photoUrl !== undefined && { photoUrl: data.photoUrl }),
+      ...(data.moveInYear !== undefined && { moveInYear: data.moveInYear }),
+      ...(data.moveInMonth !== undefined && { moveInMonth: data.moveInMonth }),
+      ...(data.moveInDay !== undefined && { moveInDay: data.moveInDay }),
+      ...(data.photoUrl && { photoUrl: data.photoUrl }),
     };
 
     console.log(

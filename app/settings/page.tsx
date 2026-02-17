@@ -11,6 +11,10 @@ const translations = {
     title: "Settings",
     subtitle: "Manage your account preferences and integrations",
     backToHome: "Back to Home",
+    account: "Account",
+    logout: "Log out",
+    loggingOut: "Logging out...",
+    logoutFailed: "Logout failed. Please try again.",
     moreSettings: "More Settings",
     moreSettingsText: "Additional settings will be added here in the future.",
   },
@@ -18,6 +22,10 @@ const translations = {
     title: "ቅንብሮች",
     subtitle: "የመለያ ምርጫዎችዎን እና እንደተማማኙ ያስተዳድሩ",
     backToHome: "ወደ ቤት ይመለሱ",
+    account: "መለያ",
+    logout: "ይውጡ",
+    loggingOut: "በመውጣት ላይ...",
+    logoutFailed: "መውጣት አልተሳካም። እባክዎ በድጋሜ ይሞክሩ።",
     moreSettings: "ተጨማማሪ ቅንብሮች",
     moreSettingsText: "በወደፊት ተጨማማሪ ቅንብሮች ይታከላሉ።",
   },
@@ -26,6 +34,24 @@ const translations = {
 export default function SettingsPage() {
   const { language } = useLanguage();
   const t = translations[language];
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleLogout(e: React.FormEvent) {
+    e.preventDefault();
+    setIsLoggingOut(true);
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (res.ok) {
+        window.location.href = "/auth/login";
+      } else {
+        alert(t.logoutFailed);
+      }
+    } catch (err) {
+      alert(t.logoutFailed);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950">
@@ -48,6 +74,22 @@ export default function SettingsPage() {
 
         <div className="space-y-6">
           <TelegramSettings ownerId="owner-1" />
+
+          {/* Account section with logout */}
+          <div className="bg-white rounded-lg border border-zinc-200 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-zinc-900 mb-4">
+              {t.account}
+            </h2>
+            <form onSubmit={handleLogout}>
+              <button
+                type="submit"
+                disabled={isLoggingOut}
+                className="w-full sm:w-auto px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoggingOut ? t.loggingOut : t.logout}
+              </button>
+            </form>
+          </div>
 
           {/* Add more settings sections here in the future */}
           <div className="bg-white rounded-lg border border-zinc-200 p-6 shadow-sm">

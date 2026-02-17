@@ -19,18 +19,12 @@ export const dbToRenter = (renter: any): Renter => ({
   phone: renter.phone,
   nationalId: renter.nationalId,
   roomId: renter.roomId,
-  moveIn: {
-    year: renter.moveInYear,
-    monthIndex: renter.moveInMonth,
-    day: renter.moveInDay,
-  },
-  moveOut: renter.moveOutYear
-    ? {
-        year: renter.moveOutYear,
-        monthIndex: renter.moveOutMonth!,
-        day: renter.moveOutDay!,
-      }
-    : undefined,
+  moveInYear: renter.moveInYear,
+  moveInMonth: renter.moveInMonth,
+  moveInDay: renter.moveInDay,
+  moveOutYear: renter.moveOutYear ?? null,
+  moveOutMonth: renter.moveOutMonth ?? null,
+  moveOutDay: renter.moveOutDay ?? null,
   photoUrl: renter.photoUrl,
 });
 

@@ -19,6 +19,7 @@ import {
   LANGUAGE_INFO,
 } from "@/lib/localization";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toEthiopian } from "ethiopian-calendar-new";
 import RenterModal from "./RenterModal";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -35,6 +36,7 @@ import {
 type Props = {
   startYear: number;
   yearsCount: number;
+  rooms: Room[];
 };
 
 function cellClass(status: RentCellStatus) {
@@ -67,11 +69,15 @@ function cellLabel(
   }
 }
 
-export default function RentMatrixMock({ startYear, yearsCount }: Props) {
+export default function RentMatrixMock({
+  startYear,
+  yearsCount,
+  rooms,
+}: Props) {
   const { language } = useLanguage();
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const router = useRouter();
   const [renters, setRenters] = useState<Renter[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [renterPhotoUrl, setRenterPhotoUrl] = useState<Record<string, string>>(
     {},
   );
@@ -80,23 +86,22 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     roomId: string;
   } | null>(null);
 
-  // Load data from database on component mount
+  // Derive renters from rooms prop
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const roomsData = await getRooms();
-        const allRenters = roomsData.flatMap((room) => room.renters);
-        setRooms(roomsData);
-        setRenters(allRenters);
-      } catch (error) {
-        console.error("Failed to load data:", error);
-      } finally {
-        setLoading(false);
+    const allRenters = rooms.flatMap((room) => room.renters);
+    setRenters(allRenters);
+
+    const fromDb: Record<string, string> = {};
+    for (const r of allRenters) {
+      if (r.photoUrl) {
+        fromDb[r.id] = r.photoUrl;
       }
-    };
-    loadData();
-  }, []);
+    }
+    setRenterPhotoUrl((prev) => ({
+      ...fromDb,
+      ...prev,
+    }));
+  }, [rooms]);
 
   // State to track paid status for manual toggling
   const [paidStatuses, setPaidStatuses] = useState<Set<string>>(new Set());
@@ -302,9 +307,9 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     if (renter) {
       // Check if this month is before renter moved in
       const moveInDate = new Date(
-        renter.moveIn.year,
-        renter.moveIn.monthIndex,
-        renter.moveIn.day,
+        renter.moveInYear,
+        renter.moveInMonth,
+        renter.moveInDay,
       );
       const currentDate = new Date(year, monthIndex, 1);
       if (currentDate < moveInDate) {
@@ -312,13 +317,18 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
       }
 
       // Check if renter moved out
-      if (renter.moveOut) {
+      if (
+        renter.moveOutYear !== null &&
+        renter.moveOutMonth !== null &&
+        renter.moveOutDay !== null
+      ) {
         const moveOutDate = new Date(
-          renter.moveOut.year,
-          renter.moveOut.monthIndex,
-          renter.moveOut.day,
+          renter.moveOutYear!,
+          renter.moveOutMonth!,
+          renter.moveOutDay!,
         );
-        if (currentDate > moveOutDate) {
+        const currentDate = new Date(year, monthIndex, 1);
+        if (currentDate >= moveOutDate) {
           return { roomId, year, monthIndex, status: "vacant" };
         }
       }
@@ -342,8 +352,8 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     try {
       await deleteRenter(renterId);
       await deleteRoom(roomId);
-      setRenters((prev) => prev.filter((r) => r.id !== renterId));
-      setRooms((prev) => prev.filter((room) => room.id !== roomId));
+      setRenters((prev: any) => prev.filter((r: any) => r.id !== renterId));
+      // setRooms((prev) => prev.filter((room) => room.id !== roomId));
       setRenterPhotoUrl((prev) => {
         if (!(renterId in prev)) return prev;
         const { [renterId]: _, ...rest } = prev;
@@ -359,6 +369,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
         return next;
       });
       setSelectedRenter(null);
+      router.refresh();
     } catch (error) {
       console.error("Failed to delete renter:", error);
     }
@@ -370,7 +381,9 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
         fullName: updated.fullName,
         phone: updated.phone,
         nationalId: updated.nationalId,
-        moveIn: updated.moveIn,
+        moveInYear: updated.moveInYear,
+        moveInMonth: updated.moveInMonth,
+        moveInDay: updated.moveInDay,
         photoUrl: updated.photoUrl,
       });
       setRenters((prev) =>
@@ -388,6 +401,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
 
   const handleNewRenterPhotoChange = (file: File | null) => {
     if (!file) return;
+    setNewRenterPhotoFile(file);
     const url = URL.createObjectURL(file);
     setNewRenterPhotoPreviewUrl(url);
   };
@@ -399,7 +413,9 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     setNewRenterMoveInYear(2018);
     setNewRenterMoveInMonthIndex(0);
     setNewRenterMoveInDay("");
+    setNewRenterPhotoFile(null);
     setNewRenterPhotoPreviewUrl(null);
+    setAddRenterError(null);
     setMonthPickerOpen(false);
   };
 
@@ -411,36 +427,91 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
     if (!fullName || !phone || !nationalId) return;
     if (!Number.isFinite(moveInDay) || moveInDay < 1 || moveInDay > 30) return;
 
+    setAddRenterError(null);
     try {
-      const roomNumber = rooms.length + 1;
-      const newRoom = await createRoom(`ROOM ${roomNumber}`);
+      let uploadedPhotoUrl: string | undefined = undefined;
+      if (newRenterPhotoFile) {
+        const uploadForm = new FormData();
+        uploadForm.append("file", newRenterPhotoFile);
 
-      const newRenter = await createRenter({
-        fullName,
-        phone,
-        nationalId,
-        roomId: newRoom.id,
-        moveIn: {
-          year: Number(newRenterMoveInYear),
-          monthIndex: newRenterMoveInMonthIndex,
-          day: moveInDay,
-        },
-        photoUrl: newRenterPhotoPreviewUrl || undefined,
+        const uploadResp = await fetch("/api/uploads/renter-photo", {
+          method: "POST",
+          body: uploadForm,
+        });
+
+        if (!uploadResp.ok) {
+          let details = "";
+          try {
+            details = await uploadResp.text();
+          } catch {
+            details = "";
+          }
+          throw new Error(
+            details ? `Photo upload failed: ${details}` : "Photo upload failed",
+          );
+        }
+
+        const uploadBody = (await uploadResp.json()) as { secureUrl?: string };
+        if (!uploadBody.secureUrl) {
+          throw new Error("Photo upload failed: missing secureUrl");
+        }
+        uploadedPhotoUrl = uploadBody.secureUrl;
+      }
+
+      const roomNumber = rooms.length + 1;
+      const response = await fetch("/api/rooms/with-renter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomName: `ROOM ${roomNumber}`,
+          fullName,
+          phone,
+          nationalId,
+          moveInYear: Number(newRenterMoveInYear),
+          moveInMonth: newRenterMoveInMonthIndex,
+          moveInDay,
+          photoUrl: uploadedPhotoUrl,
+        }),
       });
 
-      setRooms((prev) => [...prev, newRoom]);
-      setRenters((prev) => [...prev, newRenter]);
-      if (newRenterPhotoPreviewUrl) {
+      if (!response.ok) {
+        let details = "";
+        try {
+          details = await response.text();
+        } catch {
+          details = "";
+        }
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const body = JSON.parse(details);
+          setAddRenterError(body?.error ?? "Failed to create room+renter");
+        } else {
+          setAddRenterError(details || "Failed to create room+renter");
+        }
+        return;
+      }
+
+      const { room, renter } = (await response.json()) as {
+        room: { id: string };
+        renter: any;
+      };
+
+      setRenters((prev: any) => [...prev, renter]);
+      if (uploadedPhotoUrl) {
         setRenterPhotoUrl((prev) => ({
           ...prev,
-          [newRenter.id]: newRenterPhotoPreviewUrl,
+          [renter.id]: uploadedPhotoUrl,
         }));
       }
 
       setAddRenterOpen(false);
       resetAddRenterForm();
+      router.refresh();
     } catch (error) {
       console.error("Failed to add renter:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to add renter";
+      setAddRenterError(message);
     }
   };
 
@@ -490,8 +561,8 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
 
     const isFutureMonth = cellFlatIndex > currentMonthFlatIndex;
 
-    if (isCurrentMonth && renter?.moveIn && !isCurrentlyPaid) {
-      const dueDate = renter.moveIn.day; // Use move-in day as due date for now
+    if (isCurrentMonth && renter?.moveInDay && !isCurrentlyPaid) {
+      const dueDate = renter.moveInDay; // Use move-in day as due date for now
       if (currentEthiopianDate.day < dueDate) {
         // Show early payment warning modal
         setPaymentWarning({
@@ -590,9 +661,13 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   const [newRenterMoveInMonthIndex, setNewRenterMoveInMonthIndex] =
     useState<EthiopianMonthIndex>(0);
   const [newRenterMoveInDay, setNewRenterMoveInDay] = useState("");
+  const [newRenterPhotoFile, setNewRenterPhotoFile] = useState<File | null>(
+    null,
+  );
   const [newRenterPhotoPreviewUrl, setNewRenterPhotoPreviewUrl] = useState<
     string | null
   >(null);
+  const [addRenterError, setAddRenterError] = useState<string | null>(null);
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
 
   const isAnyModalOpen = Boolean(
@@ -610,8 +685,16 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
           }`}
         >
           {/* Current day header */}
-          <div className="sticky top-0 z-40 bg-white border-b border-black px-4 py-2 text-center">
-            <div className="text-sm font-semibold text-zinc-900 truncate">
+          <div className="sticky top-0 z-40 border-b border-black px-4 py-2 text-center relative overflow-hidden">
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: "url(/login-bg.png)",
+                backgroundPosition: "center 35%",
+              }}
+            />
+            <div className="absolute inset-0 bg-white/60" />
+            <div className="relative text-sm font-semibold text-zinc-900 truncate">
               {getLocalizedMonths(language)[currentEthiopianDate.monthIndex]}{" "}
               {currentEthiopianDate.day}, {currentEthiopianDate.year}
             </div>
@@ -709,6 +792,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                               <img
                                 src={
                                   renterPhotoUrl[renter.id] ??
+                                  renter.photoUrl ??
                                   getAvatarUrl(renter.nationalId)
                                 }
                                 alt={
@@ -747,10 +831,13 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                         >
                           <div className="truncate text-xs font-bold text-zinc-700">
                             {renter ? (
-                              renter.moveIn ? (
-                                formatEthiopianDate(renter.moveIn, language)
-                              ) : (
-                                ""
+                              formatEthiopianDate(
+                                {
+                                  year: renter.moveInYear,
+                                  monthIndex: renter.moveInMonth as any,
+                                  day: renter.moveInDay,
+                                },
+                                language,
                               )
                             ) : (
                               <div className="text-sm font-semibold text-zinc-900">
@@ -812,7 +899,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                           const currentDay = ethiopianToday.day;
 
                           // Get due day for this renter
-                          const dueDay = renter?.moveIn?.day || 1;
+                          const dueDay = renter?.moveInDay || 1;
 
                           const isOverdue =
                             isPastMonth ||
@@ -870,9 +957,9 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                                   </svg>
                                 </div>
                               )}
-                              {renter?.moveIn && (
+                              {renter?.moveInDay && (
                                 <span className="absolute top-0 right-0 text-[9px] text-zinc-600 px-1 z-10">
-                                  {renter.moveIn.day}
+                                  {renter.moveInDay}
                                 </span>
                               )}
                               {status !== "paid" &&
@@ -1166,6 +1253,13 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
                   />
                 )}
               </div>
+
+              {/* Inline error message */}
+              {addRenterError && (
+                <div className="rounded-md bg-red-50 border border-red-200 p-3">
+                  <p className="text-sm text-red-700">{addRenterError}</p>
+                </div>
+              )}
             </div>
 
             <div className="mt-5 flex justify-end gap-3">

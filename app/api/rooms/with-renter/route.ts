@@ -11,64 +11,68 @@ export async function POST(request: NextRequest) {
     }
 
     const {
+      roomName,
       fullName,
       phone,
       nationalId,
-      roomId,
       moveInYear,
       moveInMonth,
       moveInDay,
       photoUrl,
     } = await request.json();
 
-    if (!fullName || !phone || !nationalId || !roomId) {
+    if (!roomName || !fullName || !phone || !nationalId) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
       );
     }
 
-    // Ensure the room belongs to the current user (multi-tenancy safety)
-    const room = await prisma.room.findFirst({
-      where: {
-        id: roomId,
-        ownerId: user.id,
-      },
-      select: { id: true },
-    });
-    if (!room) {
-      return NextResponse.json({ error: "Invalid room" }, { status: 400 });
-    }
+    const result = await prisma.$transaction(async (tx) => {
+      const room = await tx.room.create({
+        data: {
+          name: roomName,
+          ownerId: user.id,
+        },
+        select: { id: true },
+      });
 
-    const renter = await prisma.renter.create({
-      data: {
-        fullName,
-        phone,
-        nationalId,
-        ownerId: user.id,
-        roomId,
-        moveInYear,
-        moveInMonth,
-        moveInDay,
-        photoUrl,
-      },
-      include: {
-        room: true,
-      },
+      const renter = await tx.renter.create({
+        data: {
+          fullName,
+          phone,
+          nationalId,
+          ownerId: user.id,
+          roomId: room.id,
+          moveInYear,
+          moveInMonth,
+          moveInDay,
+          photoUrl,
+        },
+        include: {
+          room: true,
+        },
+      });
+
+      return { room, renter };
     });
 
-    return NextResponse.json(renter);
+    return NextResponse.json(result);
   } catch (error) {
-    console.error("Failed to create renter:", error);
+    console.error("Failed to create room+renter:", error);
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         const target = Array.isArray((error.meta as any)?.target)
           ? (error.meta as any).target.join(", ")
           : String((error.meta as any)?.target ?? "unique field");
+        const isNationalIdDup = target.includes("nationalId");
+        const message = isNationalIdDup
+          ? "Check the national ID: it is being repeated."
+          : `A renter with this ${target} already exists.`;
         return NextResponse.json(
           {
-            error: `A renter with this ${target} already exists.`,
+            error: message,
             code: error.code,
           },
           { status: 409 },
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
     const isProd = process.env.NODE_ENV === "production";
     return NextResponse.json(
       {
-        error: "Failed to create renter",
+        error: "Failed to create room+renter",
         ...(isProd
           ? {}
           : {

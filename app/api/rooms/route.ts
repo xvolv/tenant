@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/session";
 
 export async function GET() {
   try {
@@ -28,6 +29,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { name } = await request.json();
+    const user = await getCurrentUser();
 
     if (!name) {
       return NextResponse.json(
@@ -36,8 +38,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const room = await prisma.room.create({
-      data: { name },
+      data: {
+        name,
+        ownerId: user.id,
+      },
       include: {
         renters: true,
         rentPayments: true,
