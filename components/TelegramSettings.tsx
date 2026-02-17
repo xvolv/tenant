@@ -5,7 +5,6 @@ import {
   MessageCircle,
   AlertCircle,
   RefreshCw,
-  Link,
   Bell,
   CheckCircle,
 } from "lucide-react";
@@ -29,13 +28,6 @@ const translations = {
     disconnecting: "Disconnecting...",
     connectTelegram: "Connect Telegram Bot",
     generatingLink: "Generating Link...",
-    connectionLinkGenerated: "Connection link generated!",
-    openTelegram: "Open Telegram & Connect",
-    instructions: "Instructions:",
-    instruction1: "Click the button above to open Telegram",
-    instruction2: "Click 'Start' or send /start to the bot",
-    instruction3: "Choose your language preference",
-    instruction4: "You're all set! You'll receive notifications",
     connectToTelegram:
       "Connect to Telegram to receive rent payment notifications directly on your phone.",
   },
@@ -56,18 +48,11 @@ const translations = {
     disconnecting: "በማቋረጥ ላይ...",
     connectTelegram: "ቴሌግራም ቦትን ይገናኙ",
     generatingLink: "አገናኛ በመፍጠር ላይ...",
-    connectionLinkGenerated: "የግንኙነት አገናኛ ተፈጠረ!",
-    openTelegram: "ቴሌግራምን ክፈት & ይገናኙ",
-    instructions: "መመሪያዎች:",
-    instruction1: "ቴሌግራምን ለመክፈት ከላይ ያለውን ቁልፍ ይጫኑ",
-    instruction2: "በቦቱ 'Start' ይጫኑ ወይም /start ይላኩ",
-    instruction3: "የቋንቋ ምርጫዎን ይምረጡ",
-    instruction4: "ተዘጋጅተዋል! ማስታወቂያዎችን ይደረስዎታል",
     connectToTelegram: "የቤት ክፍያ ማስታወቂያዎችን በቀጥታ በስልክዎ ላይ ለማግኘት ከቴሌግራም ጋር ይገናኙ።",
   },
 };
 
-export default function TelegramSettings() {
+export default function TelegramSettingsNew() {
   const { language } = useLanguage();
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -95,8 +80,8 @@ export default function TelegramSettings() {
       if (data.connected) {
         setConnectionStatus("connected");
         setUserInfo({
-          firstName: data.firstName,
-          language: data.language,
+          firstName: data.firstName || "User",
+          language: data.language || "en",
         });
       } else {
         setConnectionStatus("disconnected");
@@ -127,6 +112,27 @@ export default function TelegramSettings() {
 
       if (data.success) {
         setDeepLink(data.deepLink);
+        // Open Telegram immediately
+        window.open(data.deepLink, "_blank");
+        // Start polling for connection status
+        let attempts = 0;
+        const maxAttempts = 20;
+        const interval = setInterval(async () => {
+          attempts++;
+          try {
+            const res = await fetch("/api/telegram/status");
+            const statusData = await res.json();
+            if (statusData.connected) {
+              setConnectionStatus("connected");
+              setDeepLink("");
+              clearInterval(interval);
+            } else if (attempts >= maxAttempts) {
+              clearInterval(interval);
+            }
+          } catch {
+            // ignore
+          }
+        }, 3000);
       } else {
         setError(data.error || "Failed to generate connection link");
       }
@@ -168,31 +174,6 @@ export default function TelegramSettings() {
       setError("Failed to disconnect from Telegram");
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleOpenTelegram = () => {
-    if (deepLink) {
-      window.open(deepLink, "_blank");
-      // Start polling for connection status every 3 seconds for up to 60 seconds
-      let attempts = 0;
-      const maxAttempts = 20;
-      const interval = setInterval(async () => {
-        attempts++;
-        try {
-          const res = await fetch("/api/telegram/status");
-          const data = await res.json();
-          if (data.connected) {
-            setConnectionStatus("connected");
-            setDeepLink("");
-            clearInterval(interval);
-          } else if (attempts >= maxAttempts) {
-            clearInterval(interval);
-          }
-        } catch {
-          // ignore
-        }
-      }, 3000);
     }
   };
 
@@ -257,18 +238,6 @@ export default function TelegramSettings() {
             </div>
           </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-blue-600" />
-              <p className="text-sm text-blue-800 font-medium">
-                {t.languageSettings}
-              </p>
-            </div>
-            <p className="text-sm text-blue-600 mt-2">
-              {t.languageInstructions}
-            </p>
-          </div>
-
           <div className="space-y-3">
             <div className="text-sm text-zinc-600">
               <p className="font-medium mb-2">{t.youllReceive}</p>
@@ -309,51 +278,19 @@ export default function TelegramSettings() {
         </div>
       ) : (
         <div className="space-y-4">
-          {!deepLink ? (
-            <div>
-              <p className="text-sm text-zinc-600 mb-4">
-                {t.connectToTelegram}
-              </p>
-              <button
-                onClick={handleConnectTelegram}
-                disabled={isLoading}
-                className="w-full bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? t.generatingLink : t.connectTelegram}
-              </button>
-              {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                <div className="flex items-center gap-2">
-                  <Link className="w-4 h-4 text-blue-600" />
-                  <p className="text-sm text-blue-800 font-medium">
-                    {t.connectionLinkGenerated}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={handleOpenTelegram}
-                className="w-full bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700"
-              >
-                {t.openTelegram}
-              </button>
-
-              <div className="bg-zinc-50 rounded-md p-3">
-                <p className="text-xs text-zinc-600 font-medium mb-2">
-                  {t.instructions}
-                </p>
-                <ol className="text-xs text-zinc-600 space-y-1 list-decimal list-inside">
-                  <li>{t.instruction1}</li>
-                  <li>{t.instruction2}</li>
-                  <li>{t.instruction3}</li>
-                  <li>{t.instruction4}</li>
-                </ol>
-              </div>
-            </div>
-          )}
+          <div>
+            <p className="text-sm text-zinc-600 mb-4">{t.connectToTelegram}</p>
+            <button
+              onClick={handleConnectTelegram}
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? t.generatingLink : t.connectTelegram}
+            </button>
+            {error ? (
+              <p className="mt-2 text-sm text-red-600">{error}</p>
+            ) : null}
+          </div>
         </div>
       )}
     </div>
