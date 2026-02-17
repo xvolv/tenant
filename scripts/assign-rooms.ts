@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function assignRoomsToUser() {
-  const email = 'salassefa@gmail.com';
+  const email = "salassefa@gmail.com";
 
   // Find the user
   const user = await prisma.user.findUnique({
@@ -15,7 +15,7 @@ async function assignRoomsToUser() {
     return;
   }
 
-  console.log(`Found user: ${user.fullName} (${user.id})`);
+  console.log(`Found user: ${user.email} (${user.id})`);
 
   // Update all rooms that don't have an ownerId
   const result = await prisma.room.updateMany({
