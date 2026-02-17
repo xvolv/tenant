@@ -81,7 +81,7 @@ export default function TelegramSettingsNew() {
         setConnectionStatus("connected");
         setUserInfo({
           firstName: data.firstName || "User",
-          language: data.language || "en",
+          language: data.language || "am",
         });
       } else {
         setConnectionStatus("disconnected");
