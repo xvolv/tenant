@@ -1,4 +1,5 @@
 "use client";
+import Loading from "./Loading";
 
 import {
   formatEthiopianDate,
@@ -601,9 +602,7 @@ export default function RentMatrixMock({ startYear, yearsCount }: Props) {
   return (
     <div className="relative">
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="text-sm text-zinc-500">Loading...</div>
-        </div>
+        <Loading />
       ) : (
         <div
           className={`mt-4 rounded-xl border border-zinc-200 bg-white shadow-sm ${
