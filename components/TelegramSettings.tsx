@@ -174,6 +174,25 @@ export default function TelegramSettings() {
   const handleOpenTelegram = () => {
     if (deepLink) {
       window.open(deepLink, "_blank");
+      // Start polling for connection status every 3 seconds for up to 60 seconds
+      let attempts = 0;
+      const maxAttempts = 20;
+      const interval = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await fetch("/api/telegram/status");
+          const data = await res.json();
+          if (data.connected) {
+            setConnectionStatus("connected");
+            setDeepLink("");
+            clearInterval(interval);
+          } else if (attempts >= maxAttempts) {
+            clearInterval(interval);
+          }
+        } catch {
+          // ignore
+        }
+      }, 3000);
     }
   };
 
