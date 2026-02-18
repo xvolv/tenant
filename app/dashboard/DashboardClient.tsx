@@ -51,11 +51,16 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
 
             <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 px-4 py-4">
               <div className="min-w-0">
-                <div className="text-xl font-semibold leading-7 text-zinc-900">
-                  Rent Matrix
+                <div className="flex items-center gap-3">
+                  <img
+                    src="/logo.png"
+                    alt="SalTenant"
+                    className="h-12 w-auto"
+                  />
+                  <div className="text-xl font-semibold leading-7 text-zinc-900"></div>
                 </div>
-                <div className="text-sm text-zinc-600 hidden sm:block">
-                  Showing: 2016–{endYear}
+                <div className="text-sm text-zinc-600 hidden sm:block font-serif">
+                  2016 | {endYear}
                 </div>
               </div>
 
