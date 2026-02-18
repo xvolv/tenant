@@ -66,7 +66,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-950">
+    <div className="min-h-screen grid-bg-pattern text-zinc-950">
       <div className="mx-auto w-full max-w-4xl px-4 py-6">
         {/* Back to Home Button */}
         <div className="mb-4">

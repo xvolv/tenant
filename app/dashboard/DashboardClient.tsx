@@ -36,10 +36,10 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
   const endYear = ethiopianCurrentYear + 2;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-950">
+    <div className="min-h-screen grid-bg-pattern">
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
         <section className="mt-6">
-          <div className="relative rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="relative rounded-xl border border-zinc-200/50 bg-white shadow-sm">
             <div
               className="absolute inset-0 bg-cover bg-center"
               style={{
@@ -156,7 +156,6 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
                     <span className="hidden sm:inline">Settings</span>
                   </Link>
                 </div>
-                
               </div>
             </div>
           </div>
