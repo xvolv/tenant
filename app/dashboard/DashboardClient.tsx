@@ -51,6 +51,12 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
 
             <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 px-4 py-4">
               <div className="min-w-0">
+                <div className="text-sm text-zinc-600 hidden sm:block font-serif">
+                  2016 | {endYear}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end sm:justify-normal gap-2 rounded-lg border border-zinc-200 bg-white p-1 shadow-sm flex-shrink-0">
                 <div className="flex items-center gap-3">
                   <img
                     src="/logo.png"
@@ -59,12 +65,7 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
                   />
                   <div className="text-xl font-semibold leading-7 text-zinc-900"></div>
                 </div>
-                <div className="text-sm text-zinc-600 hidden sm:block font-serif">
-                  2016 | {endYear}
-                </div>
-              </div>
 
-              <div className="flex items-center justify-end sm:justify-normal gap-2 rounded-lg border border-zinc-200 bg-white p-1 shadow-sm flex-shrink-0">
                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() =>
