@@ -80,7 +80,7 @@ export default function SignupPage() {
     <div className="relative min-h-screen bg-zinc-950">
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url(/login-bg.png)" }}
+        style={{ backgroundImage: "url(/login-bg.avif)" }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/55 to-black/70" />
 

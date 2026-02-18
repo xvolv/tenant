@@ -43,7 +43,7 @@ export default function DashboardClient({ rooms }: { rooms: any[] }) {
             <div
               className="absolute inset-0 bg-cover bg-center"
               style={{
-                backgroundImage: "url(/login-bg.png)",
+                backgroundImage: "url(/login-bg.avif)",
                 backgroundPosition: "center 35%",
               }}
             />
