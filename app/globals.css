@@ -170,6 +170,6 @@ select:focus {
 .grid-bg-pattern {
   background-color: #e5e5f7;
   opacity: 1;
-  background-image: radial-gradient(#6366f1 0.8px, #e5e5f7 0.8px);
+  background-image: radial-gradient(#6366f1 1.5px, #e5e5f7 1.5px);
   background-size: 20px 20px;
 }
