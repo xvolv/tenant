@@ -42,13 +42,13 @@ type Props = {
 function cellClass(status: RentCellStatus) {
   switch (status) {
     case "paid":
-      return "bg-emerald-50 text-emerald-800 border-emerald-100 relative overflow-hidden";
+      return "bg-emerald-50 text-emerald-800 border-emerald-100 relative overflow-hidden cursor-pointer hover:border-emerald-300 shadow-md hover:shadow-lg transition-all duration-150";
     case "overdue":
-      return "bg-yellow-50 text-yellow-800 border-yellow-200 relative overflow-hidden cursor-pointer hover:border-yellow-400";
+      return "bg-yellow-50 text-yellow-800 border-yellow-200 relative overflow-hidden cursor-pointer hover:border-yellow-400 shadow-md hover:shadow-lg transition-all duration-150";
     case "vacant":
-      return "bg-zinc-100 text-zinc-500 border-zinc-200";
+      return "bg-zinc-100 text-zinc-500 border-zinc-200 shadow-sm";
     default:
-      return "bg-white text-zinc-400 border-zinc-200 cursor-pointer hover:border-blue-400";
+      return "bg-white text-zinc-400 border-zinc-200 cursor-pointer hover:border-blue-400 shadow-md hover:shadow-lg transition-all duration-150";
   }
 }
 
@@ -119,14 +119,20 @@ export default function RentMatrixMock({
       | "unmark-paid";
   } | null>(null);
 
-  // Always show 2016 to 2020 (current year + 2 future years)
+  // Always show 2016 to current Ethiopian year + 2 future years
   const now = new Date();
   const ethiopianCurrentYear = toEthiopian(
     now.getFullYear(),
     now.getMonth() + 1,
     now.getDate(),
   ).year;
-  const displayYears = [2016, 2017, 2018, 2019, 2020];
+
+  // Generate years dynamically: from startYear to current Ethiopian year + 2
+  const endYear = ethiopianCurrentYear + 2;
+  const displayYears = Array.from(
+    { length: endYear - startYear + 1 },
+    (_, i) => startYear + i,
+  );
   const months = getLocalizedMonths(language);
   const years = displayYears;
   const totalMonths = years.length * months.length;
@@ -931,15 +937,25 @@ export default function RentMatrixMock({
                             }`}
                           >
                             <div
-                              className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${
-                                isClickable ? "" : "cursor-default"
-                              } ${cellClass(status)}`}
+                              className={`relative flex h-16 items-center justify-center rounded-lg border text-[11px] font-semibold ${isClickable ? "" : "cursor-default"} ${cellClass(status)}`}
                               title={snap?.note ?? ""}
                               onClick={() =>
                                 isClickable &&
                                 handleCellClick(room.id, y, monthIndex)
                               }
                             >
+                              {/* Inner 3D button effect */}
+                              {isClickable && (
+                                <div
+                                  className={`absolute inset-1 rounded border shadow-[inset_0_-2px_0_rgba(0,0,0,0.1)] z-0 ${
+                                    status === "paid"
+                                      ? "bg-emerald-100 border-emerald-200"
+                                      : status === "overdue"
+                                        ? "bg-yellow-100 border-yellow-200"
+                                        : "bg-zinc-50 border-zinc-200"
+                                  }`}
+                                />
+                              )}
                               {status === "paid" && (
                                 <div className="absolute inset-0 flex items-center justify-center opacity-20">
                                   <svg

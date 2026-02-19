@@ -47,6 +47,26 @@ const ETHIOPIAN_MONTHS = {
 // Message templates
 const messageTemplates = {
   en: {
+    moveInToday: (roomName: string, tenantName: string, ethiopianDate: any) =>
+      `📅 *Today: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n\n` +
+      `🏠 *NEW TENANT MOVING IN TODAY*\n\n` +
+      `🏢 *Room: ${roomName}*\n` +
+      `👤 *Tenant: ${tenantName}*\n\n` +
+      `🔔 *Status: MOVE-IN TODAY*\n\n` +
+      `A new tenant is moving in today. Prepare the room!`,
+
+    moveInTomorrow: (
+      roomName: string,
+      tenantName: string,
+      ethiopianDate: any,
+    ) =>
+      `📅 *Today: ${ETHIOPIAN_MONTHS.en[ethiopianDate.month - 1]} ${ethiopianDate.day}, ${ethiopianDate.year}*\n\n` +
+      `🏠 *TENANT MOVING IN TOMORROW*\n\n` +
+      `🏢 *Room: ${roomName}*\n` +
+      `👤 *Tenant: ${tenantName}*\n\n` +
+      `🔔 *Status: MOVE-IN TOMORROW*\n\n` +
+      `A new tenant will be moving in tomorrow. Please prepare the room!`,
+
     dueSoon: (
       days: number,
       roomName: string,
@@ -94,6 +114,26 @@ const messageTemplates = {
       `Thank you! Payment recorded successfully.`,
   },
   am: {
+    moveInToday: (roomName: string, tenantName: string, ethiopianDate: any) =>
+      `📅 *ዛሬ: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n\n` +
+      `🏠 *አዲስ ተከራይ ዛሄድ ይገባል*\n\n` +
+      `🏢 *ክፍል: ${roomName}*\n` +
+      `👤 *ተከራይ: ${tenantName}*\n\n` +
+      `🔔 *ሁኔታ: ዛሄድ ገባ*\n\n` +
+      `አዲስ ተከራይ ዛሄድ ይገባል። ክፍሉን ያዘጋጁ!`,
+
+    moveInTomorrow: (
+      roomName: string,
+      tenantName: string,
+      ethiopianDate: any,
+    ) =>
+      `📅 *ዛሄድ: ${ETHIOPIAN_MONTHS.am[ethiopianDate.month - 1]} ${ethiopianDate.day} ቀን ${ethiopianDate.year}*\n\n` +
+      `🏠 *ተከራይ ነገ ይገባል*\n\n` +
+      `🏢 *ክፍል: ${roomName}*\n` +
+      `👤 *ተከራይ: ${tenantName}*\n\n` +
+      `🔔 *ሁኔታ: ነገ ገባ*\n\n` +
+      `አዲስ ተከራይ ነገ ይገባል። ክፍሉን ያዘጋጁ!`,
+
     dueSoon: (
       days: number,
       roomName: string,
@@ -201,6 +241,74 @@ export async function checkRentNotifications() {
       console.log(
         `   📥 Move-in date: ${ETHIOPIAN_MONTHS.en[moveInDate.month - 1]} ${moveInDate.day}, ${moveInDate.year}`,
       );
+
+      // === MOVE-IN NOTIFICATION CHECK ===
+      // Check if today or tomorrow is the renter's move-in date
+      const isMoveInToday =
+        moveInDate.year === ethiopianToday.year &&
+        moveInDate.month === ethiopianToday.month &&
+        moveInDate.day === ethiopianToday.day;
+
+      // Calculate tomorrow's date in Ethiopian calendar
+      const tomorrowGregorian = new Date(now);
+      tomorrowGregorian.setDate(tomorrowGregorian.getDate() + 1);
+      const ethiopianTomorrow = toEthiopian(
+        tomorrowGregorian.getFullYear(),
+        tomorrowGregorian.getMonth() + 1,
+        tomorrowGregorian.getDate(),
+      );
+
+      const isMoveInTomorrow =
+        moveInDate.year === ethiopianTomorrow.year &&
+        moveInDate.month === ethiopianTomorrow.month &&
+        moveInDate.day === ethiopianTomorrow.day;
+
+      console.log(
+        `   🏠 Move-in today: ${isMoveInToday}, tomorrow: ${isMoveInTomorrow}`,
+      );
+
+      // Send move-in notification if today or tomorrow
+      if (isMoveInToday || isMoveInTomorrow) {
+        const telegramUserId = await getOwnerTelegramUserId(room.id);
+
+        if (telegramUserId) {
+          const language = await getUserLanguage(telegramUserId);
+          const templates =
+            messageTemplates[language as keyof typeof messageTemplates];
+
+          const message = isMoveInToday
+            ? templates.moveInToday(room.name, renter.fullName, ethiopianToday)
+            : templates.moveInTomorrow(
+                room.name,
+                renter.fullName,
+                ethiopianToday,
+              );
+
+          const type = isMoveInToday ? "move_in_today" : "move_in_tomorrow";
+
+          try {
+            const telegramApiUrl = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+            const response = await fetch(telegramApiUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                chat_id: telegramUserId,
+                text: message,
+                parse_mode: "HTML",
+              }),
+            });
+
+            if (response.ok) {
+              notificationsSent++;
+              console.log(`   ✅ Move-in notification sent!`);
+            }
+          } catch (error) {
+            console.error(`   ❌ Failed to send move-in notification:`, error);
+          }
+        }
+      }
 
       // Calculate due date directly in Ethiopian calendar
       // Rent is due on the same day each month as move-in day
